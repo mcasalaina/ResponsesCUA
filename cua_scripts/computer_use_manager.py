@@ -1,18 +1,14 @@
 import asyncio
-import base64
 import logging
-import subprocess
-import tempfile
-from contextlib import asynccontextmanager
-from io import BytesIO
-from typing import AsyncIterator, Literal, NamedTuple
 import os
+import tempfile
 
+from typing import Literal, NamedTuple
 from dotenv import load_dotenv
-from PIL import Image
 from utils import get_config, get_parser, make_req, may_retry
 
-from vm import VNCMachine
+from vnc import VNCManager
+from local import LocalManager
 
 load_dotenv()
 load_dotenv(dotenv_path='secrets.env')
@@ -24,10 +20,8 @@ class Size(NamedTuple):
     width: int
     height: int
 
-
 DEFAULT_SIZE = Size(1024, 768)
 ALT_SIZE = Size(1920, 1080)
-
 
 class PersistentState:
     previous_response_id: str
@@ -48,89 +42,6 @@ class PersistentState:
                 self.computer_action_args = {k: v for k, v in item["action"].items() if k != "type"}
             else:
                 self.next_action = "user_interaction"
-
-
-class VMManager:
-    def __init__(self, address):
-        self.vnc = VNCMachine(address=address)
-
-    async def take_screenshot(self):
-        image_path = 'screenshot.png'
-        await self.vnc.screenshot(screenshot_name=image_path, keys=None)
-        with open(image_path, 'rb') as image_file:
-            image_data = image_file.read()
-        screenshot_base64 = base64.b64encode(image_data).decode('utf-8')
-        return screenshot_base64
-    
-    async def take_action(self, action: str, action_args: dict) -> str:
-        if action in ("initialize", "get", "screenshot"):
-            return await self.take_screenshot()
-        elif action == "click":
-            await self.vnc.mouse_click(
-                position=(action_args["x"], action_args["y"]),
-                action="click",
-                button=1
-            )
-        elif action == "double_click":
-            await self.vnc.mouse_click(
-                position=(action_args["x"], action_args["y"]),
-                action="double_click",
-                button=1
-            )
-        elif action == "drag":
-            await self.vnc.drag_mouse(
-                path=action_args["path"],
-            )
-        elif action == "keypress":
-            await self.vnc.multi_key_press(
-                keys=action_args["keys"],
-            )
-        elif action == "move":
-            await self.vnc.move_mouse(
-                position=(action_args["x"], action_args["y"]),
-            )
-        elif action == "scroll":
-            await self.vnc.scroll(
-                position=(action_args["x"], action_args["y"]),
-                horizontal=action_args["scroll_x"],
-                vertical=action_args["scroll_y"],
-            )
-        elif action == "type":
-            await self.vnc.type(
-                text=action_args["text"],
-            )
-        elif action == "wait":
-            await asyncio.sleep(1)
-        else:
-            print(f"Invalid action: {action}")
-            return ""
-
-        # Take a screenshot after the action
-        return await self.take_screenshot()
-
-    async def handle_tool_call(
-        self, dir: str, action: str, action_args: dict, step_count: int, resize: bool
-    ) -> str:
-        print(f"Running action: {action} with args: {action_args}")
-        screenshot_base64 = await self.take_action(action, action_args)
-        if not screenshot_base64:
-            return ""
-
-        
-
-        if resize:
-            print("resizing screenshot")
-            screenshot_bytes = base64.b64decode(screenshot_base64)
-            size = ALT_SIZE
-            with Image.open(BytesIO(screenshot_bytes)) as img:
-                resized_img = img.resize((size.width, size.height), Image.Resampling.LANCZOS)
-                buffer = BytesIO()
-                resized_img.save(buffer, format=img.format)
-                screenshot_bytes = buffer.getvalue()
-                screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
-
-        print(f"Screenshot (partial): {screenshot_base64[:100]}...")
-        return screenshot_base64
 
 
 def make_init_request(initial_task, args, config):
@@ -156,7 +67,6 @@ def make_init_request(initial_task, args, config):
         config=config,
     )
 
-
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     parser = get_parser()
@@ -170,20 +80,25 @@ def main() -> None:
     parser.add_argument("--instructions", dest="instructions", help="Instructions to follow")
     parser.add_argument("--alt-screen-size", default=False, dest="alt_screen_size", action="store_true")
     parser.add_argument("--model", dest="model", default="computer-use-alpha")
-    parser.add_argument("--environment", dest="environment", default="linux")
-    parser.add_argument("--autoenter", dest="autoenter", default=False, action="store_true")
+    parser.add_argument("--environment", dest="environment", default="browser")
+    parser.add_argument("--autoenter", dest="autoenter", default=True, action="store_true")
 
     args = parser.parse_args()
     config = get_config(args)
     config["API_KEY"] = api_key
 
-    vm_manager = VMManager(address=args.vm_address)
+    use_local_machine = True
+    if use_local_machine:
+        vm_manager = LocalManager()
+        initial_task = "open web browser"
+    else:
+        vm_manager = VNCManager(address=args.vm_address)
+        initial_task = (
+            args.instructions
+            or input("Please enter the initial task for the computer: ")
+            or "Go to booking.com"
+        )
 
-    initial_task = (
-        args.instructions
-        or input("Please enter the initial task for the computer: ")
-        or "Go to booking.com"
-    )
     init_response = make_init_request(initial_task, args, config)
     persisted_state = PersistentState(init_response)
     print(f"arg.alt_screen_size: {args.alt_screen_size}")
@@ -205,7 +120,7 @@ def main() -> None:
                         persisted_state.computer_action,
                         persisted_state.computer_action_args,
                         step_count,
-                        resize=args.alt_screen_size,
+                        resize=ALT_SIZE if args.alt_screen_size else None
                     )
                 )
             else:
@@ -253,7 +168,6 @@ def main() -> None:
                 ),
             )
             persisted_state = PersistentState(next_response)
-
 
 if __name__ == "__main__":
     main()

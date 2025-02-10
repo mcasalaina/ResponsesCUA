@@ -1,7 +1,12 @@
+
+import asyncio
+import base64
 import math
 import time
 from contextlib import contextmanager
 from typing import Iterator, Literal
+from io import BytesIO
+from PIL import Image
 
 from vncdotool import api
 
@@ -102,7 +107,7 @@ class VNCMachine:
                 client.mousePress(1)
                 time.sleep(0.05)
                 client.mousePress(1)
-    
+
     async def screenshot(self, keys: list[str],screenshot_name='screenshot.png') -> None:
         client = await self._get_vnc_client()
         with self.hold_keys(client, keys):
@@ -196,3 +201,82 @@ class VNCMachine:
             for key in reversed(keys):
                 key = cua_key_to_vnc_key(key=key)
                 client.keyUp(key)
+
+class VNCManager:
+    def __init__(self, address):
+        self.vnc = VNCMachine(address=address)
+
+    async def take_screenshot(self):
+        image_path = 'screenshot.png'
+        await self.vnc.screenshot(screenshot_name=image_path, keys=None)
+        with open(image_path, 'rb') as image_file:
+            image_data = image_file.read()
+        screenshot_base64 = base64.b64encode(image_data).decode('utf-8')
+        return screenshot_base64
+    
+    async def take_action(self, action: str, action_args: dict) -> str:
+        if action in ("initialize", "get", "screenshot"):
+            return await self.take_screenshot()
+        elif action == "click":
+            await self.vnc.mouse_click(
+                position=(action_args["x"], action_args["y"]),
+                action="click",
+                button=1
+            )
+        elif action == "double_click":
+            await self.vnc.mouse_click(
+                position=(action_args["x"], action_args["y"]),
+                action="double_click",
+                button=1
+            )
+        elif action == "drag":
+            await self.vnc.drag_mouse(
+                path=action_args["path"],
+            )
+        elif action == "keypress":
+            await self.vnc.multi_key_press(
+                keys=action_args["keys"],
+            )
+        elif action == "move":
+            await self.vnc.move_mouse(
+                position=(action_args["x"], action_args["y"]),
+            )
+        elif action == "scroll":
+            await self.vnc.scroll(
+                position=(action_args["x"], action_args["y"]),
+                horizontal=action_args["scroll_x"],
+                vertical=action_args["scroll_y"],
+            )
+        elif action == "type":
+            await self.vnc.type(
+                text=action_args["text"],
+            )
+        elif action == "wait":
+            await asyncio.sleep(1)
+        else:
+            print(f"Invalid action: {action}")
+            return ""
+
+        # Take a screenshot after the action
+        return await self.take_screenshot()
+
+    async def handle_tool_call(
+        self, dir: str, action: str, action_args: dict, step_count: int, resize: tuple[int, int] = None
+    ) -> str:
+        print(f"Running action: {action} with args: {action_args}")
+        screenshot_base64 = await self.take_action(action, action_args)
+        if not screenshot_base64:
+            return ""
+
+        if resize:
+            print("resizing screenshot")
+            screenshot_bytes = base64.b64decode(screenshot_base64)
+            with Image.open(BytesIO(screenshot_bytes)) as img:
+                resized_img = img.resize((resize[0], resize[1]), Image.Resampling.LANCZOS)
+                buffer = BytesIO()
+                resized_img.save(buffer, format=img.format)
+                screenshot_bytes = buffer.getvalue()
+                screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+
+        print(f"Screenshot (partial): {screenshot_base64[:100]}...")
+        return screenshot_base64
