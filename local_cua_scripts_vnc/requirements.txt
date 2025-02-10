@@ -1,0 +1,4 @@
+python-dotenv
+vncdotool
+requests
+pygments
