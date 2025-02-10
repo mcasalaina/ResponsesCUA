@@ -1,3 +1,8 @@
+'''This sample is a simple example of how to use the CUA model along with the Responses API. When running the script, you will be prompted to give the CUA model
+a task to complete. The CUA model will then take the screenshot of the current screen, and then take action to try and complete the task.
+Make sure to install the required packages before running the script, in particular pyautogui.
+'''
+
 import argparse
 from typing import Literal, NamedTuple
 import pyautogui
@@ -6,19 +11,21 @@ import base64
 from io import BytesIO
 import requests
 import asyncio
+import os
 
 # API Configuration
-API_KEY = "API_KEY"
-API_BASE_URL = "API_BASE_URL"
+API_KEY = os.getenv("API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL")
 
 class size(NamedTuple):
     width: int
     height: int
 
-
+# Default and alt size for the screenshot
 DEFAULT_SIZE = size(1024, 768)
 ALT_SIZE = size(1920, 1080)
 
+#Tracking and controlling the state
 class state:
     previous_response_id: str
     next_action: Literal["user_interaction", "computer_tool_output"]
@@ -27,9 +34,11 @@ class state:
     computer_action_args: dict = {}
 
     def __init__(self, response):
+        #Asserting the response is completed
         assert response["status"] == "completed"
         self.previous_response_id = response["id"]
 
+        #If the item is a computer call, setting the next action and passing the action arguments 
         for item in response["output"]:
             if item.get("type") == "computer_call":
                 self.next_action = "computer_tool_output"
@@ -39,6 +48,7 @@ class state:
             else:
                 self.next_action = "user_interaction"
 
+#Class that controls the computer by taking screenshots and performing actions
 class machine:
     def __init__(self):
         self.vnc = pyautogui
@@ -63,19 +73,23 @@ class machine:
         except Exception as e:
             print(f"Error taking screenshot: {e}")
             return None
-
+        
+    #Take action based on the screenshot
     async def take_action(self, action: str, action_args: dict) -> str:
+        # Return a screenshot if the action is to initialize, get, or take a screenshot
         if action in ("initialize", "get", "screenshot"):
             return await self.take_screenshot()
+        # Perform a single mouse click at the specified coordinates
         elif action == "click":
             self.vnc.click(action_args["x"], action_args["y"])
+        # Perform a double mouse click at the specified coordinates
         elif action == "double_click":
             self.vnc.doubleClick(action_args["x"], action_args["y"])
+        # Drag the mouse along the specified path with a slight delay for smooth dragging
         elif action == "drag":
-            # Drag the mouse along the specified path
             for x, y in action_args["path"]:
-                self.vnc.moveTo(x, y, duration=0.1)  # Add a slight delay for smooth dragging
-        elif action == "keypress":
+                self.vnc.moveTo(x, y, duration=0.1)
+        # Press the specified keys; handle both single key and list of keys
             keys = action_args["keys"]
             if isinstance(keys, list):
                 for key in keys:
@@ -84,24 +98,29 @@ class machine:
             else:
                 pyautogui.press(keys)
                 print(f"Pressed key: {keys}")
+        # Move to the specified coordinates and perform vertical and horizontal scrolling
         elif action == "scroll":
-            # Perform scrolling
             self.vnc.moveTo(action_args["x"], action_args["y"])
             self.vnc.scroll(action_args["scroll_y"])
             self.vnc.hscroll(action_args["scroll_x"])
+        # Move the mouse to the specified coordinates
         elif action == "move":
             self.vnc.moveTo(action_args["x"], action_args["y"])
+        # Type the specified text
         elif action == "type":
             self.vnc.typewrite(action_args["text"])
+        # Wait for a specified duration (1 second in this case)
         elif action == "wait":
             await asyncio.sleep(1)
         else:
+            # Print an error message if the action is invalid
             print(f"Invalid action: {action}")
             return ""
 
-        # Take a screenshot after the action
+        # After performing the action, take a new screenshot and return it
         return await self.take_screenshot()
 
+    #Handle the tool call
     async def handle_tool_call(self, action: str, action_args: dict) -> str:
         print(f"Running action: {action} with args: {action_args}")
         screenshot_base64 = await self.take_action(action, action_args)
@@ -111,8 +130,13 @@ class machine:
         print(f"Screenshot (partial): {screenshot_base64[:100]}...")
         return screenshot_base64
 
+#Make the API request
 def make_api_request(endpoint: str, data: dict) -> dict:
-    """Centralized API request handler"""
+    """Centralized API request handler
+
+    !!!!NOTE: WILL NEED TO UPDATE THIS WITH AZURE REQS!!!!"""
+
+
     url = f"{API_BASE_URL}/{endpoint}"
     headers = {
         "OpenAI-Beta": "responses=v1",
@@ -130,6 +154,7 @@ def make_api_request(endpoint: str, data: dict) -> dict:
             print(f"Response text: {e.response.text}")
         return None
 
+#Make the initial call that kicks off the process.
 def make_initial_call(user_instruction: str):
     data = {
         "model": "computer-use-alpha",
@@ -144,6 +169,7 @@ def make_initial_call(user_instruction: str):
 
     return make_api_request("responses", data)
 
+#Make the follow up calls
 def make_follow_up_call(previous_response_id: str, call_id: str, screenshot_base64: str):
     data = {
         "model": "computer-use-alpha",
@@ -152,7 +178,7 @@ def make_follow_up_call(previous_response_id: str, call_id: str, screenshot_base
             "type": "computer-preview",
             "display_width": DEFAULT_SIZE.width,  # Use 1024x768 for API
             "display_height": DEFAULT_SIZE.height,
-            "environment": "mac"
+            "environment": "windows"
         }],
         "input": [{
             "type": "computer_call_output",
@@ -178,6 +204,7 @@ def get_parser():
 
     return parser
 
+#Main function that runs the script
 def main():
     pyautogui.FAILSAFE = True
 
