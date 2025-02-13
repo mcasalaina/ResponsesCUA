@@ -52,11 +52,9 @@ def cua_key_to_vnc_key(key: str) -> str:
 
 
 class VNCMachine:
-    def __init__(
-        self,
-        address: str,
-    ) -> None:
+    def __init__(self, address: str) -> None:
         self.address = address
+        self.mouse_last_position = None
 
     async def _get_vnc_client(self) -> api.ThreadedVNCClientProxy:
         """
@@ -203,8 +201,9 @@ class VNCMachine:
                 client.keyUp(key)
 
 class VNCManager:
-    def __init__(self, address):
+    def __init__(self, address, environment):
         self.vnc = VNCMachine(address=address)
+        self.environment = environment
 
     async def take_screenshot(self):
         image_path = 'screenshot.png'
@@ -213,11 +212,12 @@ class VNCManager:
             image_data = image_file.read()
         screenshot_base64 = base64.b64encode(image_data).decode('utf-8')
         return screenshot_base64
-    
+
     async def take_action(self, action: str, action_args: dict) -> str:
         if action in ("initialize", "get", "screenshot"):
             return await self.take_screenshot()
-        elif action == "click":
+
+        if action == "click":
             await self.vnc.mouse_click(
                 position=(action_args["x"], action_args["y"]),
                 action="click",
@@ -261,7 +261,7 @@ class VNCManager:
         return await self.take_screenshot()
 
     async def handle_tool_call(
-        self, dir: str, action: str, action_args: dict, step_count: int, resize: tuple[int, int] = None
+        self, action: str, action_args: dict, resize: tuple[int, int] = None
     ) -> str:
         print(f"Running action: {action} with args: {action_args}")
         screenshot_base64 = await self.take_action(action, action_args)
@@ -278,5 +278,5 @@ class VNCManager:
                 screenshot_bytes = buffer.getvalue()
                 screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
 
-        print(f"Screenshot (partial): {screenshot_base64[:100]}...")
+        print(f"Screenshot (partial): {screenshot_base64[:20]}...")
         return screenshot_base64

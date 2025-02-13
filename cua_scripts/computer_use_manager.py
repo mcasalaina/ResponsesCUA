@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import tempfile
 
 from typing import Literal, NamedTuple
 from dotenv import load_dotenv
@@ -44,7 +43,7 @@ class PersistentState:
                 self.next_action = "user_interaction"
 
 
-def make_init_request(initial_task, args, config):
+def make_init_request(initial_task, args, config, environment):
     size = DEFAULT_SIZE if not args.alt_screen_size else ALT_SIZE
 
     return make_req(
@@ -58,7 +57,7 @@ def make_init_request(initial_task, args, config):
                     "type": "computer-preview",
                     "display_width": size.width,
                     "display_height": size.height,
-                    "environment": args.environment,
+                    "environment": environment,
                 }
             ],
         },
@@ -90,84 +89,83 @@ def main() -> None:
     use_local_machine = True
     if use_local_machine:
         vm_manager = LocalManager()
-        initial_task = "open web browser"
+        initial_task = "open web browser and go to microsoft.com"
     else:
-        vm_manager = VNCManager(address=args.vm_address)
+        vm_manager = VNCManager(address=args.vm_address, environment=args.environment)
         initial_task = (
             args.instructions
             or input("Please enter the initial task for the computer: ")
             or "Go to booking.com"
         )
 
-    init_response = make_init_request(initial_task, args, config)
+    init_response = make_init_request(initial_task, args, config, environment=vm_manager.environment)
     persisted_state = PersistentState(init_response)
     print(f"arg.alt_screen_size: {args.alt_screen_size}")
 
     size = DEFAULT_SIZE if not args.alt_screen_size else ALT_SIZE
     print(f"Using screen size: {size}")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        step_count = 0
-        user_message = ""
-        base64_screenshot_data = ""
-        while True:
-            if persisted_state.next_action == "computer_tool_output":
-                if not args.autoenter:
-                    input("Press Enter to run computer tool...")
-                base64_screenshot_data = asyncio.run(
-                    vm_manager.handle_tool_call(
-                        tmpdir,
-                        persisted_state.computer_action,
-                        persisted_state.computer_action_args,
-                        step_count,
-                        resize=ALT_SIZE if args.alt_screen_size else None
-                    )
+    step_count = 0
+    user_message = ""
+    base64_screenshot_data = ""
+    while True:
+        if persisted_state.next_action == "computer_tool_output":
+            if not args.autoenter:
+                input("Press Enter to run computer tool...")
+            base64_screenshot_data = asyncio.run(
+                vm_manager.handle_tool_call(
+                    persisted_state.computer_action,
+                    persisted_state.computer_action_args,
+                    resize=ALT_SIZE if args.alt_screen_size else None
                 )
-            else:
-                user_message = input(
-                    "Please enter your message and press Enter to continue sampling: "
-                )
-
-            step_count += 1
-            next_response = may_retry(make_req,
-                "POST",
-                "/v1/responses",
-                body={
-                    "model": args.model,
-                    "previous_response_id": persisted_state.previous_response_id,
-                    "tools": [
-                        {
-                            "type": "computer-preview",
-                            "display_width": size.width,
-                            "display_height": size.height,
-                            "environment": args.environment,
-                        }
-                    ],
-                    "input": (
-                        [
-                            {
-                                "type": "computer_call_output",
-                                "call_id": persisted_state.previous_computer_id,
-                                "output": {
-                                    "type": "input_image",
-                                    "image_url": f"data:image/png;base64,{base64_screenshot_data}",
-                                },
-                            },
-                        ]
-                        if persisted_state.next_action == "computer_tool_output"
-                        else user_message
-                    ),
-                },
-                step_name=f"step {step_count}",
-                suppress_input=args.no_input,
-                config=config,
-                json_print_redact_path=(
-                    [".input[0].output.image_url"]
-                    if persisted_state.next_action == "computer_tool_output"
-                    else []
-                ),
             )
-            persisted_state = PersistentState(next_response)
+        else:
+            user_message = input("Please enter your message and press Enter to continue sampling: ")
+
+        step_count += 1
+        next_response = may_retry(make_req,
+            "POST",
+            "/v1/responses",
+            body={
+                "model": args.model,
+                "previous_response_id": persisted_state.previous_response_id,
+                "tools": [
+                    {
+                        "type": "computer-preview",
+                        "display_width": size.width,
+                        "display_height": size.height,
+                        "environment": vm_manager.environment,
+                    }
+                ],
+                "input": (
+                    [
+                        {
+                            "type": "computer_call_output",
+                            "call_id": persisted_state.previous_computer_id,
+                            "output": {
+                                "type": "input_image",
+                                "image_url": f"data:image/png;base64,{base64_screenshot_data}",
+                            },
+                        },
+                    ]
+                    if persisted_state.next_action == "computer_tool_output"
+                    else user_message
+                ),
+            },
+            step_name=f"step {step_count}",
+            suppress_input=args.no_input,
+            config=config,
+            json_print_redact_path=(
+                [".input[0].output.image_url"]
+                if persisted_state.next_action == "computer_tool_output"
+                else []
+            ),
+        )
+        for output in next_response["output"]:
+            if output['type'] == 'message' and output['role'] == 'assistant':
+                for content in output['content']:
+                    print(f"Assistant: '{content['text']}'")
+        persisted_state = PersistentState(next_response)
 
 if __name__ == "__main__":
     main()

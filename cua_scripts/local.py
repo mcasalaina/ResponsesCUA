@@ -2,21 +2,34 @@
 import asyncio
 import base64
 import io
+import platform
 import PIL
 import pyautogui
 
 # Use pyautogui to drive local machine
 class LocalManager:
+
     def __init__(self):
         self.target_width, self.target_height = 1024, 768
         screenshot = pyautogui.screenshot()
         self.screen_width, self.screen_height = screenshot.size
+        system = platform.system()
+        if system == "Windows":
+            self.environment = "windows"
+        elif system == "Darwin":
+            self.environment = "mac"
+        elif system == "Linux":
+            self.environment = "linux"
+        else:
+            raise NotImplementedError(f"Unsupported operating system: '{system}'")
 
     async def take_screenshot(self):
         screenshot = pyautogui.screenshot()
-        screenshot.save("screenshot.png")
-        screenshot = PIL.Image.open("screenshot.png")
-        self.screen_width, self.screen_height = screenshot.size
+        image_buffer = io.BytesIO()
+        screenshot.save(image_buffer, format="PNG")
+        image_buffer.seek(0)
+        image = PIL.Image.open(image_buffer)
+        self.screen_width, self.screen_height = image.size
         aspect_ratio = self.screen_width / self.screen_height
         if aspect_ratio > 1:
             new_width = self.target_width
@@ -24,14 +37,15 @@ class LocalManager:
         else:
             new_height = self.target_height
             new_width = int(self.target_height * aspect_ratio)
-        resized_screenshot = screenshot.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
+        resized_image = image.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
         padded_image = PIL.Image.new("RGB", (self.target_width, self.target_height), (0, 0, 0))
         x_offset = (self.target_width - new_width) // 2
         y_offset = (self.target_height - new_height) // 2
-        padded_image.paste(resized_screenshot, (x_offset, y_offset))
-        padded_image.save("screenshot.png")
-        with open("screenshot.png", "rb") as image_file:
-            image_data = image_file.read()
+        padded_image.paste(resized_image, (x_offset, y_offset))
+        padded_image_buffer = io.BytesIO()
+        padded_image.save(padded_image_buffer, format="PNG")
+        padded_image_buffer.seek(0)
+        image_data = padded_image_buffer.getvalue()
         screenshot_base64 = base64.b64encode(image_data).decode("utf-8")
         return screenshot_base64
 
@@ -68,8 +82,13 @@ class LocalManager:
                 pyautogui.moveTo(x, y, duration=0.5)
                 pyautogui.doubleClick(x, y, button=button)
         elif action == "drag":
-            raise NotImplementedError("drag")
-            # await self.vnc.drag_mouse(path=action_args["path"],)
+            path = action_args["path"]
+            x, y = path[0]
+            pyautogui.moveTo(x, y, duration=0.5)
+            pyautogui.mouseDown()
+            for x, y in path[1:]:
+                pyautogui.moveTo(x, y, duration=0.5)
+            pyautogui.mouseUp()
         elif action == "keypress":
             for key in action_args["keys"]:
                 key = key.lower()
@@ -77,11 +96,9 @@ class LocalManager:
             for key in action_args["keys"]:
                 key = key.lower()
                 pyautogui.keyUp(key)
-            # await self.vnc.multi_key_press(keys=action_args["keys"],)
         elif action == "move":
             point = self.point_to_screen_coords(action_args["x"], action_args["y"])
             pyautogui.moveTo(point, duration=0.5)
-            # await self.vnc.move_mouse(position=(action_args["x"], action_args["y"]),)
         elif action == "scroll":
             raise NotImplementedError("scroll")
             # await self.vnc.scroll(
@@ -91,7 +108,6 @@ class LocalManager:
             # )
         elif action == "type":
             pyautogui.write(action_args["text"])
-            # await self.vnc.type(text=action_args["text"],)
         elif action == "wait":
             await asyncio.sleep(1)
         else:
@@ -101,9 +117,7 @@ class LocalManager:
         # Take a screenshot after the action
         return await self.take_screenshot()
 
-    async def handle_tool_call(
-        self, dir: str, action: str, action_args: dict, step_count: int, resize: tuple[int, int] = None
-    ) -> str:
+    async def handle_tool_call(self, action: str, action_args: dict, resize: tuple[int, int] = None) -> str:
         print(f"Running action: {action} with args: {action_args}")
         screenshot_base64 = await self.take_action(action, action_args)
         if not screenshot_base64:
@@ -119,5 +133,5 @@ class LocalManager:
                 screenshot_bytes = buffer.getvalue()
                 screenshot_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
 
-        print(f"Screenshot (partial): {screenshot_base64[:100]}...")
+        print(f"Screenshot (partial): {screenshot_base64[:20]}...")
         return screenshot_base64
