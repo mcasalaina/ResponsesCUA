@@ -1,12 +1,21 @@
-# Introduction
 
-This is a python rig that connects to an Ubuntu Linux VM and enables OpenAI Operator, a preview Computer Use Agent (CUA), to use that virtual machine using the VNC protocol.
+This is a Python sample that uses the Computer Using Agent (CUA) model to control a computer.
+
+This sample supports both a local computer or a remote machine served using VNC.
 
 This pretty much works, although we're still working through some bugs in the vnc commands...
 
 # Setup
 
-## Linux VM Creation in Windows
+## Run with a local machine
+
+1. Make sure your key is assign to an environment variable called `OPENAI_API_KEY`.
+2. Run `pip install -r requirements.txt`
+3. Run `python app.py --instructions "Find me a dishwasher safe pasta spoon on Amazon."`
+
+## Run with a remote VNC machine
+
+### Linux VM Creation in Windows
 
 Note: this is most easily ran directly from windows, which avoids additional networking configs to get WSL talking to hyper-v
 
@@ -19,7 +28,7 @@ Note: this is most easily ran directly from windows, which avoids additional net
   * Now start the VM again and it will install Ubuntu Linux.
 * In Hyper-V, go to **Actions->Hyper-V Settings** in the right sidebar. Go to **Enhanced Session Mode Policy**, and turn off **Allow enhanced session mode**. If you do not do this, mouse events may not be properly captured.
 
-## Linux VM Setup
+### Linux VM Setup
 
 Once you've got the Linux VM installed, open a terminal.
 
@@ -40,22 +49,11 @@ Once you've got the Linux VM installed, open a terminal.
   ```
 * **Optional:** connect to the VM from hyper-v so you can watch the computer control model in action.
 
-## Python Script Setup In Windows
+### How To Use The Script
 
-* Install the required Python packages by running:
-  ```
-  pip install -r requirements.txt
-  ```
-* Put your OpenAI API key in a secrets file called secrets.env.
-  * Or in an environment variable called **OPENAI_API_KEY_NEWMODEL**.
-
-# How To Use The Script
-
-Invoke the script like this, using the IP address you gathered from your VM earlier:
-
-```
-python computer_use_manager.py --vm_address=<YOUR_VM_IP_ADDRESS> --autoenter --instructions "Find me a dishwasher safe silicone pasta spoon on Amazon."
-```
+1. Make sure your key is assign to an environment variable called `OPENAI_API_KEY`.
+2. Run `pip install -r requirements.txt`
+3. Run `python app.py --vm_address=<YOUR_VM_IP_ADDRESS> --autoenter --instructions "Find me a dishwasher safe silicone pasta spoon on Amazon."` using the IP address you gathered from your VM earlier.
 
 Arguments
 
