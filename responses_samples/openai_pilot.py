@@ -34,7 +34,7 @@ class ResponsesClient:
     def __init__(self, api_key: str):
         self.headers = {
             "Content-Type":"application/json", 
-             "api-key": os.getenv("OPENAI_API_KEY"), 
+             "api-key": os.getenv("AZURE_OPENAI_API_KEY"), 
              "x-ms-enable-preview": "true"
         }
 
@@ -52,8 +52,7 @@ class ResponsesClient:
         parallel_tool_calls: Optional[bool] = None,
     ) -> Json:
         return self._post(
-            #url="https://api.openai.com/v1/responses",
-            url=os.getenv("BASE_URL")+f"?api-version={os.getenv('API_VERSION')}",
+            url=os.getenv("AZURE_OPENAI_ENDPOINT")+f"/openai/responses?api-version=2024-12-01-preview",
             data={
                 "model": model,
                 "previous_response_id": previous_response_id,
@@ -74,8 +73,7 @@ class ResponsesClient:
             params.append(f"include[]={includable}")
 
         return self._get(
-            #url=f"https://api.openai.com/v1/responses/{response_id}?{'&'.join(params)}"
-            url=os.getenv("BASE_URL")+f"/{response_id}?api-version={os.getenv('API_VERSION')}"
+            url=os.getenv("AZURE_OPENAI_ENDPOINT")+f"/openai/responses/{response_id}?api-version=2024-12-01-preview"
         )
 
     def _get(self, url) -> Json:
@@ -124,7 +122,7 @@ class OpenAIResponsesPilotClient:
     api_key: str
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self.api_key = api_key or os.environ.get("AZURE_OPENAI_API_KEY")
 
     @property
     def beta(self) -> OpenAIBeta:
