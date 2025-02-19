@@ -33,8 +33,8 @@ def compact(json: Json) -> Json:
 class ResponsesClient:
     def __init__(self, api_key: str):
         self.headers = {
-            "Authorization": f"Bearer {api_key}",
-            "accept": "application/json",
+            "Content-Type":"application/json",
+            "api-key": os.getenv("OPENAI_API_KEY"),
             "x-ms-enable-preview": "true"
         }
 

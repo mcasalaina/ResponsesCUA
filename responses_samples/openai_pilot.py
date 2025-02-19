@@ -33,9 +33,9 @@ def compact(json: Json) -> Json:
 class ResponsesClient:
     def __init__(self, api_key: str):
         self.headers = {
-            "x-ms-enable-preview": "true",
-            "Authorization": f"Bearer {api_key}",
-            "accept": "application/json",
+            "Content-Type":"application/json", 
+             "api-key": os.getenv("OPENAI_API_KEY"), 
+             "x-ms-enable-preview": "true"
         }
 
     def create(
@@ -52,6 +52,7 @@ class ResponsesClient:
         parallel_tool_calls: Optional[bool] = None,
     ) -> Json:
         return self._post(
+            #url="https://api.openai.com/v1/responses",
             url=os.getenv("BASE_URL")+f"?api-version={os.getenv('API_VERSION')}",
             data={
                 "model": model,
@@ -73,6 +74,7 @@ class ResponsesClient:
             params.append(f"include[]={includable}")
 
         return self._get(
+            #url=f"https://api.openai.com/v1/responses/{response_id}?{'&'.join(params)}"
             url=os.getenv("BASE_URL")+f"/{response_id}?api-version={os.getenv('API_VERSION')}"
         )
 
