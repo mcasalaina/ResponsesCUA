@@ -29,9 +29,16 @@ def main():
     parser.add_argument("--alt-screen-size", default=False, dest="alt_screen_size", action="store_true")
     args = parser.parse_args()
 
+    # OpenAI endpoint
     api_key = os.environ.get("OPENAI_API_KEY")
     base_url = "https://api.openai.com"
     model = args.model
+
+    # Azure OpenAI endpoint
+    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+    base_url = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    api_version = "2024-12-01-preview"
+    model = 'cua-bugbash'
 
     user_message = "Open web browser and go to microsoft.com."
     # user_message = args.instructions if args.instructions else input("Please enter the initial task for the computer: ")
@@ -44,7 +51,7 @@ def main():
     size = (1920, 1080) if args.alt_screen_size else (1024, 768)
     machine = cua.Scaler(*size, machine)
 
-    agent = cua.Agent(base_url, api_key, model, machine)
+    agent = cua.Agent(base_url, api_key, model, machine, api_version)
     agent.start_task(user_message)
     while True:
         user_message = None
