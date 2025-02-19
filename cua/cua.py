@@ -109,9 +109,10 @@ class Scaler:
 class Agent:
     """CUA agent to start and continue task execution"""
 
-    def __init__(self, base_url, api_key, model, machine):
+    def __init__(self, base_url, api_key, model, machine, api_version=None): # pylint: disable=too-many-arguments
         self.base_url = base_url
         self.api_key = api_key
+        self.api_version = api_version
         self.model = model
         self.machine = machine
         self.state = None
@@ -128,7 +129,7 @@ class Agent:
                 "environment": self.machine.environment,
             }],
         }
-        response = self._make_api_request("POST", "/v1/responses", body)
+        response = self._make_api_request("POST", "responses", body)
         self.state = State(response)
         self.step_count = 0
 
@@ -176,7 +177,7 @@ class Agent:
                 else user_message
             ),
         }
-        next_response = self._may_retry(self._make_api_request, "POST", "/v1/responses", body,
+        next_response = self._may_retry(self._make_api_request, "POST", "responses", body,
             json_print_redact_path=(
                 [".input[0].output.image_url"]
                 if self.state.next_action == "computer_tool_output"
@@ -218,27 +219,38 @@ class Agent:
     ):
         if json_print_redact_path is None:
             json_print_redact_path = []
-        request_url = f"{self.base_url}{url}"
+
+        headers = {
+            "x-ms-enable-preview": "true",
+        }
+        params = {}
+        if self.base_url.endswith("openai.azure.com"):
+            request_url = f"{self.base_url}/openai/{url}"
+            # headers['x-ms-client-request-id'] = 'true'
+            headers["accept-encoding"] = "gzip, deflate, br"
+            headers["accept"] = "*/*"
+            headers["api-key"] = self.api_key
+            headers["User-Agent"] = ""
+            params['api-version'] = self.api_version
+        else:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            request_url = f"{self.base_url}/v1/{url}"
+
         logger.debug("%s %s", method.lower(), request_url)
         if body:
             self._pretty_print_json_obj(body, json_print_redact_path)
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}", 
-            "x-ms-enable-preview": "true",
-        }
-        if url == "/v1/files" and body["file"]:
+        if url == "files" and body["file"]:
             # For file uploads, send a multipart/form-data request
             with open(body["file"], "rb") as file:
                 data = {"purpose": body["purpose"]}
                 files = {"file": (body["file"], file)}
-                response = requests.request(method, request_url, data=data, files=files, headers=headers, timeout=60)
+                response = requests.request(method, request_url, data=data, files=files, headers=headers, params=params, timeout=60)
         else:
-            if url.startswith("/v1/vector_stores"):
+            if url.startswith("vector_stores"):
                 headers["OpenAI-Beta"] = "assistants=v2"
             data = body if method == "POST" else None
-            response = requests.request(method, request_url, json=data, headers=headers, timeout=60
-            )
+            response = requests.request(method, request_url, json=data, headers=headers, params=params, timeout=60)
         if response.status_code >= 400:
             body = json.loads(response.content)
             request_id = response.headers.get("X-Request-ID")
