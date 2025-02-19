@@ -30,14 +30,17 @@ def main():
     args = parser.parse_args()
 
     # OpenAI endpoint
-    api_key = os.environ.get("OPENAI_API_KEY")
-    base_url = "https://api.openai.com"
-    model = args.model
+    client = cua.Client(
+        base_url="https://api.openai.com",
+        api_key=os.environ.get("OPENAI_API_KEY"))
 
     # Azure OpenAI endpoint
-    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
-    base_url = os.environ.get("AZURE_OPENAI_ENDPOINT")
-    api_version = "2024-12-01-preview"
+    client = cua.Client(
+        base_url=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+        api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+        api_version="2024-12-01-preview")
+
+    model = args.model
     model = 'cua-bugbash'
 
     user_message = "Open web browser and go to microsoft.com."
@@ -51,7 +54,7 @@ def main():
     size = (1920, 1080) if args.alt_screen_size else (1024, 768)
     machine = cua.Scaler(*size, machine)
 
-    agent = cua.Agent(base_url, api_key, model, machine, api_version)
+    agent = cua.Agent(client, model, machine)
     agent.start_task(user_message)
     while True:
         user_message = None
