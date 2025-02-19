@@ -106,13 +106,85 @@ class Scaler:
         y = (y - y_offset) * (self.screen_height / new_height)
         return int(x), int(y)
 
-class Agent:
-    """CUA agent to start and continue task execution"""
+class Client:
+    """Responses API calling code."""
 
-    def __init__(self, base_url, api_key, model, machine, api_version=None): # pylint: disable=too-many-arguments
+    def __init__(self, base_url, api_key, api_version=None):
         self.base_url = base_url
         self.api_key = api_key
         self.api_version = api_version
+
+    def make_request(self, method, url, body, json_print_redact_path=None):
+        if json_print_redact_path is None:
+            json_print_redact_path = []
+        headers = {
+            "x-ms-enable-preview": "true",
+        }
+        params = {}
+        if self.base_url.endswith("openai.azure.com"):
+            request_url = f"{self.base_url}/openai/{url}"
+            # headers['x-ms-client-request-id'] = 'true'
+            headers["accept-encoding"] = "gzip, deflate, br"
+            headers["accept"] = "*/*"
+            headers["api-key"] = self.api_key
+            headers["User-Agent"] = ""
+            params['api-version'] = self.api_version
+        else:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            request_url = f"{self.base_url}/v1/{url}"
+
+        logger.debug("%s %s", method.lower(), request_url)
+        if body:
+            self._pretty_print_json_obj(body, json_print_redact_path)
+
+        if url == "files" and body["file"]:
+            # For file uploads, send a multipart/form-data request
+            with open(body["file"], "rb") as file:
+                data = {"purpose": body["purpose"]}
+                files = {"file": (body["file"], file)}
+                response = requests.request(method, request_url, data=data, files=files, headers=headers, params=params, timeout=60)
+        else:
+            if url.startswith("vector_stores"):
+                headers["OpenAI-Beta"] = "assistants=v2"
+            data = body if method == "POST" else None
+            response = requests.request(method, request_url, json=data, headers=headers, params=params, timeout=60)
+        if response.status_code >= 400:
+            body = json.loads(response.content)
+            request_id = response.headers.get("X-Request-ID")
+            raise openai_pilot.OpenAIError(request_id=request_id, status_code=response.status_code, message=body)
+        self._pretty_print_json_obj(response.json())
+        logger.debug("Request id: %s", response.headers.get('X-Request-ID'))
+        return response.json()
+
+    def _pretty_print_json_obj(self, json_obj, json_print_redact_path=None):
+        if json_print_redact_path is None:
+            json_print_redact_path = []
+        def redact_keys(obj, path=""):
+            if not json_print_redact_path:
+                return obj
+            if isinstance(obj, dict):
+                return {
+                    key: (
+                        redact_keys(value, f"{path}.{key}" if path else f".{key}")
+                        if (f"{path}.{key}" if path else f".{key}") not in json_print_redact_path
+                        else "... (skipped)"
+                    )
+                    for key, value in obj.items()
+                }
+            if isinstance(obj, list):
+                return [redact_keys(item, f"{path}[{index}]") for index, item in enumerate(obj)]
+            return obj
+
+        redacted_obj = redact_keys(json_obj, path="")
+        json_str = json.dumps(redacted_obj, indent=4, sort_keys=True)
+        json_str = json_str.replace("\\n", "\n")
+        logger.debug(json_str)
+
+class Agent:
+    """CUA agent to start and continue task execution"""
+
+    def __init__(self, client, model, machine):
+        self.client = client
         self.model = model
         self.machine = machine
         self.state = None
@@ -129,7 +201,7 @@ class Agent:
                 "environment": self.machine.environment,
             }],
         }
-        response = self._make_api_request("POST", "responses", body)
+        response = self.client.make_request("POST", "responses", body)
         self.state = State(response)
         self.step_count = 0
 
@@ -177,7 +249,7 @@ class Agent:
                 else user_message
             ),
         }
-        next_response = self._may_retry(self._make_api_request, "POST", "responses", body,
+        next_response = self._may_retry(self.client.make_request, "POST", "responses", body,
             json_print_redact_path=(
                 [".input[0].output.image_url"]
                 if self.state.next_action == "computer_tool_output"
@@ -185,79 +257,6 @@ class Agent:
             ),
         )
         self.state = State(next_response)
-
-    def _pretty_print_json_obj(self, json_obj, json_print_redact_path=None):
-        if json_print_redact_path is None:
-            json_print_redact_path = []
-        def redact_keys(obj, path=""):
-            if not json_print_redact_path:
-                return obj
-            if isinstance(obj, dict):
-                return {
-                    key: (
-                        redact_keys(value, f"{path}.{key}" if path else f".{key}")
-                        if (f"{path}.{key}" if path else f".{key}") not in json_print_redact_path
-                        else "... (skipped)"
-                    )
-                    for key, value in obj.items()
-                }
-            if isinstance(obj, list):
-                return [redact_keys(item, f"{path}[{index}]") for index, item in enumerate(obj)]
-            return obj
-
-        redacted_obj = redact_keys(json_obj, path="")
-        json_str = json.dumps(redacted_obj, indent=4, sort_keys=True)
-        json_str = json_str.replace("\\n", "\n")
-        logger.debug(json_str)
-
-    def _make_api_request(
-        self,
-        method,
-        url,
-        body,
-        json_print_redact_path=None,
-    ):
-        if json_print_redact_path is None:
-            json_print_redact_path = []
-
-        headers = {
-            "x-ms-enable-preview": "true",
-        }
-        params = {}
-        if self.base_url.endswith("openai.azure.com"):
-            request_url = f"{self.base_url}/openai/{url}"
-            # headers['x-ms-client-request-id'] = 'true'
-            headers["accept-encoding"] = "gzip, deflate, br"
-            headers["accept"] = "*/*"
-            headers["api-key"] = self.api_key
-            headers["User-Agent"] = ""
-            params['api-version'] = self.api_version
-        else:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-            request_url = f"{self.base_url}/v1/{url}"
-
-        logger.debug("%s %s", method.lower(), request_url)
-        if body:
-            self._pretty_print_json_obj(body, json_print_redact_path)
-
-        if url == "files" and body["file"]:
-            # For file uploads, send a multipart/form-data request
-            with open(body["file"], "rb") as file:
-                data = {"purpose": body["purpose"]}
-                files = {"file": (body["file"], file)}
-                response = requests.request(method, request_url, data=data, files=files, headers=headers, params=params, timeout=60)
-        else:
-            if url.startswith("vector_stores"):
-                headers["OpenAI-Beta"] = "assistants=v2"
-            data = body if method == "POST" else None
-            response = requests.request(method, request_url, json=data, headers=headers, params=params, timeout=60)
-        if response.status_code >= 400:
-            body = json.loads(response.content)
-            request_id = response.headers.get("X-Request-ID")
-            raise openai_pilot.OpenAIError(request_id=request_id, status_code=response.status_code, message=body)
-        self._pretty_print_json_obj(response.json())
-        logger.debug("Request id: %s", response.headers.get('X-Request-ID'))
-        return response.json()
 
     def _may_retry(self, func, *args, **kwargs):
         retry = True
