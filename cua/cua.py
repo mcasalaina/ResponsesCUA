@@ -225,7 +225,7 @@ class Agent:
 
         headers = {
             "Authorization": f"Bearer {self.api_key}", 
-            "OpenAI-Beta": "responses=v1"
+            "x-ms-enable-preview": "true",
         }
         if url == "/v1/files" and body["file"]:
             # For file uploads, send a multipart/form-data request
