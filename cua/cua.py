@@ -24,7 +24,6 @@ class State:
     output_text: str = ""
 
     def __init__(self, response):
-        print("Response: ", response)
         assert response["status"] == "completed"
         self.response = response
         self.next_action = ""
