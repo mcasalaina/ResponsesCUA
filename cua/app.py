@@ -16,12 +16,12 @@ import vnc
 def main():
 
     logging.basicConfig(level=logging.WARNING, format='%(message)s')
-    logging.getLogger("cua").setLevel(logging.DEBUG)
+    logging.getLogger("cua").setLevel(logging.INFO)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--machine", dest="machine", help="The machine to use", type=str, default="local")
-    parser.add_argument("--instructions", dest="instructions", help="Instructions to follow")
-    parser.add_argument("--model", dest="model", default="computer-use-alpha")
+    parser.add_argument("--instructions", dest="instructions", help="Instructions to follow", default="Open web browser and go to microsoft.com.")
+    parser.add_argument("--model", dest="model", default="computer-use-preview")
     parser.add_argument("--autoenter", dest="autoenter", default=True, action="store_true")
     parser.add_argument("--environment", dest="environment", default="linux")
     parser.add_argument("--no-input", dest="no_input", default=True, help="Whether or not to run through the demo without any input from the user", action="store_true")
@@ -41,26 +41,27 @@ def main():
         api_version="2024-12-01-preview")
 
     model = args.model
-    model = 'cua-bugbash'
 
-    user_message = "Open web browser and go to microsoft.com."
-    # user_message = args.instructions if args.instructions else input("Please enter the initial task for the computer: ")
+    # Machine is used to take screenshots and send keystrokes or mouse clicks
+    machine = local.Machine() if args.machine == "local" else vnc.Machine(args.vm_address, args.environment)
 
-    if args.machine == "local":
-        machine = local.Machine()
-    else:
-        machine = vnc.Machine(args.vm_address, args.environment)
-
+    # Scaler is used to resize the screen to a smaller size
     size = (1920, 1080) if args.alt_screen_size else (1024, 768)
     machine = cua.Scaler(*size, machine)
 
+    # Agent to run the CUA model and keep track of state
     agent = cua.Agent(client, model, machine)
+
+    # Get the user request
+    user_message = args.instructions if args.instructions else input("Please enter the initial task for the computer: ")
+
     agent.start_task(user_message)
     while True:
         user_message = None
         if agent.requires_consent() and not args.autoenter:
             input("Press Enter to run computer tool...")
         elif agent.requires_user_input():
+            print(f"Agent: \"{" ".join(agent.state.output_text)}\"")
             user_message = input("Please enter your message to continue: ")
         agent.continue_task(user_message)
 

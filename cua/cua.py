@@ -110,7 +110,7 @@ class Client:
     """Responses API calling code."""
 
     def __init__(self, base_url, api_key, api_version=None):
-        self.base_url = base_url
+        self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.api_version = api_version
 
@@ -132,11 +132,9 @@ class Client:
         else:
             headers["Authorization"] = f"Bearer {self.api_key}"
             request_url = f"{self.base_url}/v1/{url}"
-
         logger.debug("%s %s", method.lower(), request_url)
         if body:
             self._pretty_print_json_obj(body, json_print_redact_path)
-
         if url == "files" and body["file"]:
             # For file uploads, send a multipart/form-data request
             with open(body["file"], "rb") as file:
@@ -259,23 +257,30 @@ class Agent:
         self.state = State(next_response)
 
     def _may_retry(self, func, *args, **kwargs):
-        retry = True
-        while retry:
-            wait_time = 0
+        retry = 10
+        wait_time = 0
+        while retry > 0:
+            retry -= 1
             try:
                 time.sleep(wait_time)
                 return func(*args, **kwargs)
             except openai_pilot.OpenAIError as oaierr:
                 if oaierr.status_code == 429:
-                    message = oaierr.message["error"]["message"]
-                    match = re.search(r"Please try again in (\d+)s", message)
-                    if match:
-                        wait_time = int(match.group(1))
-                        logger.debug("Rate limit exceeded. Waiting for %s seconds.", wait_time)
-                    else:
-                        logger.debug("%s. Cannot parse wait time.", oaierr.message)
-                        retry = False
+                    error = oaierr.message["error"]
+                    wait_time = 10
+                    if 'message' in error:
+                        message = error["message"]
+                        match = re.search(r"Please try again in (\d+)s", message)
+                        if match:
+                            wait_time = int(match.group(1))
+                            logger.info("Rate limit exceeded. Waiting for %s seconds.", wait_time)
+                        else:
+                            logger.critical("%s. Cannot parse wait time.", oaierr.message)
+                            retry = 0
+                    elif 'type' in error and error['type'] == 'rate_limit_error':
+                        logger.info("Rate limit error. Waiting for %s seconds.", wait_time)
             except Exception as error: # pylint: disable=broad-except
                 logger.critical("Error: %s", error)
                 retry = False
+        logger.critical("Max retries exceeded.")
         return None
