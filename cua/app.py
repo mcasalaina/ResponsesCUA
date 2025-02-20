@@ -4,7 +4,7 @@ When running the script, you will be prompted to give the CUA model a task to co
 The CUA model will take the screenshot of the current screen, and then take action to try and complete the task.
 Make sure to install the required packages before running the script.
 '''
-
+from dotenv import load_dotenv
 import argparse
 import logging
 import os
@@ -14,36 +14,37 @@ import local
 import vnc
 
 def main():
+    load_dotenv()
 
     logging.basicConfig(level=logging.WARNING, format='%(message)s')
-    logging.getLogger("cua").setLevel(logging.INFO)
+    logging.getLogger("cua").setLevel(logging.DEBUG)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--machine", dest="machine", help="The machine to use", type=str, default="local")
     parser.add_argument("--instructions", dest="instructions", help="Instructions to follow", default="Open web browser and go to microsoft.com.")
     parser.add_argument("--model", dest="model", default="computer-use-preview")
+    parser.add_argument("--endpoint", default="azure", help="The endpoint to use, either openai or azure")
     parser.add_argument("--autoenter", dest="autoenter", default=True, action="store_true")
     parser.add_argument("--environment", dest="environment", default="linux")
     parser.add_argument("--no-input", dest="no_input", default=True, help="Whether or not to run through the demo without any input from the user", action="store_true")
-    parser.add_argument("--vm_address", dest="vm_address", help="The address of the VM to use", type=str, default="192.168.236.154")
+    parser.add_argument("--vm_address", dest="vm_address", help="The address of the VM to use", type=str, default=None)
     parser.add_argument("--alt-screen-size", default=False, dest="alt_screen_size", action="store_true")
     args = parser.parse_args()
 
-    # OpenAI endpoint
-    client = cua.Client(
-        base_url="https://api.openai.com",
-        api_key=os.environ.get("OPENAI_API_KEY"))
+    if args.endpoint == "azure":
+        client = cua.Client(
+            base_url=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+            bearer_token=os.environ.get("AZURE_BEARER_TOKEN"),
+            api_version="2024-12-01-preview")
 
-    # Azure OpenAI endpoint
-    client = cua.Client(
-        base_url=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-        api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-        api_version="2024-12-01-preview")
+    else:
+        client = cua.Client(
+            base_url="https://api.openai.com",
+            api_key=os.environ.get("OPENAI_API_KEY"))
 
     model = args.model
 
     # Machine is used to take screenshots and send keystrokes or mouse clicks
-    machine = local.Machine() if args.machine == "local" else vnc.Machine(args.vm_address, args.environment)
+    machine = local.Machine() if args.vm_address is None else vnc.Machine(address=args.vm_address, environment=args.environment)
 
     # Scaler is used to resize the screen to a smaller size
     size = (1920, 1080) if args.alt_screen_size else (1024, 768)
@@ -61,7 +62,7 @@ def main():
         if agent.requires_consent() and not args.autoenter:
             input("Press Enter to run computer tool...")
         elif agent.requires_user_input():
-            print(f"Agent: \"{" ".join(agent.state.output_text)}\"")
+            print(f"Agent: {" ".join(agent.state.output_text)}")
             user_message = input("Please enter your message to continue: ")
         agent.continue_task(user_message)
 

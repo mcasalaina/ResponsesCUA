@@ -62,7 +62,7 @@ class Machine:
             raise ValueError(f"Invalid action: {action}")
 
     async def handle_tool_call(self, action: str, action_args: dict) -> bytearray:
-        if action in ("initialize", "get", "screenshot"):
+        if action not in ("initialize", "get", "screenshot"):
             await self.take_action(action, action_args)
 
         # Take a screenshot after the action
@@ -231,7 +231,7 @@ class VNCMachine:
         client: api.ThreadedVNCClientProxy,
         delay: float = 0.0002,
     ) -> None:
-        if not hasattr(self, 'mouse_last_position'): #assuming some arbitrary initial position
+        if not hasattr(self, 'mouse_last_position') or self.mouse_last_position is None: #assuming some arbitrary initial position
             self.mouse_last_position = (100, 100)
         x1, y1 = self.mouse_last_position
         x2, y2 = position
