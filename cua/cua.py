@@ -260,13 +260,13 @@ class Agent:
         retry = 10
         wait_time = 0
         while retry > 0:
-            retry -= 1
             try:
                 time.sleep(wait_time)
                 return func(*args, **kwargs)
             except openai_pilot.OpenAIError as oaierr:
                 if oaierr.status_code == 429:
                     error = oaierr.message["error"]
+                    retry -= 1
                     wait_time = 10
                     if 'message' in error:
                         message = error["message"]
@@ -279,8 +279,10 @@ class Agent:
                             retry = 0
                     elif 'type' in error and error['type'] == 'rate_limit_error':
                         logger.info("Rate limit error. Waiting for %s seconds.", wait_time)
+                else:
+                    logger.critical(str(oaierr))
             except Exception as error: # pylint: disable=broad-except
                 logger.critical("Error: %s", error)
-                retry = False
+                retry = 0
         logger.critical("Max retries exceeded.")
         return None

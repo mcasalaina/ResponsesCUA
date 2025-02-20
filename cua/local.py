@@ -39,14 +39,14 @@ class Machine:
         if action == "click":
             x, y = action_args["x"], action_args["y"]
             if 0 <= x < self.width and 0 <= y < self.height:
-                button = action_args["button"]
+                button = action_args["button"] if "button" in action_args else "left"
                 button = "middle" if button == "wheel" else button
                 pyautogui.moveTo(x, y, duration=0.1)
                 pyautogui.click(x, y, button=button)
         elif action == "double_click":
             x, y = action_args["x"], action_args["y"]
             if 0 <= x < self.width and 0 <= y < self.height:
-                button = action_args["button"]
+                button = action_args["button"] if "button" in action_args else "left"
                 button = "middle" if button == "wheel" else button
                 pyautogui.moveTo(x, y, duration=0.1)
                 pyautogui.doubleClick(x, y, button=button)
