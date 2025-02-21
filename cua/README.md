@@ -11,20 +11,20 @@ This pretty much works, although we're still working through some bugs in the vn
 
 1. Clone the repo
 2. Run `pip install -r requirements.txt`
-3. Create a new `.env` file in the `cua` directory
-4. If you are using OpenAI endpoint, add your OpenAI API key to the `.env` file: 
-    ```env
-    OPENAI_API_KEY="<YOUR_OPENAI_KEY>"
-    ```
-5. If you are using Azure OpenAI endpoint, first obtain the bearer token:
-    ```bash
-    az account get-access-token --scope https://cognitiveservices.azure.com/.default
-    ```
-   Then add the following to your `.env` file:
-   ```env
-   AZURE_OPENAI_ENDPOINT="<YOUR_AZURE_OPENAI_ENDPOINT>" 
-   AZURE_BEARER_TOKEN="<YOUR_AZURE_BEARER_TOKEN>"
-   ```
+3. Set these follow environment variables:
+    - If you are using OpenAI endpoint:
+        ```env
+        OPENAI_API_KEY="<YOUR_OPENAI_KEY>"
+        ```
+    - If you are using Azure OpenAI endpoint, first obtain the bearer token:
+        ```bash
+        az account get-access-token --scope https://cognitiveservices.azure.com/.default
+        ```
+        Then set the following environment variables:
+        ```env
+        AZURE_OPENAI_ENDPOINT="<YOUR_AZURE_OPENAI_ENDPOINT>" 
+        AZURE_OPENAI_API_KEY="<YOUR_BEARER_TOKEN_OBTAINED_ABOVE>"
+        ```
 
 ## Run with a local machine
 
