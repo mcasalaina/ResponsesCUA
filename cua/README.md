@@ -70,11 +70,11 @@ Once you've got the Linux VM installed, open a terminal.
 
 1. Make sure your environment is set up as described above.
 2. Make sure your VM is running and the VNC server is started.
-3. Run `python app.py --vm_address=<YOUR_VM_IP_ADDRESS> --endpoint azure --autoenter --instructions "Find me a dishwasher safe silicone pasta spoon on Amazon."` using the IP address you gathered from your VM earlier.
+3. Run `python app.py --vm-address=<YOUR_VM_IP_ADDRESS> --endpoint azure --autoenter --instructions "Find me a dishwasher safe silicone pasta spoon on Amazon."` using the IP address you gathered from your VM earlier.
 
 Arguments
 
-- `--vm_address` (str): The address of the VM to use. Default is "192.168.236.154".
+- `--vm-address` (str): The address of the VM to use. Default is "192.168.236.154".
 - `--instructions`: Instructions to follow. If this is not specified, the script will ask you for the instructions when it starts up.
 - `--alt-screen-size` (bool): Flag to enable alternative screen size. Default is False.
 - `--model`: The model to use. Default is "computer-use-alpha".
