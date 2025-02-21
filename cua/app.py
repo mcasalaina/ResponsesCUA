@@ -4,7 +4,7 @@ When running the script, you will be prompted to give the CUA model a task to co
 The CUA model will take the screenshot of the current screen, and then take action to try and complete the task.
 Make sure to install the required packages before running the script.
 '''
-from dotenv import load_dotenv
+
 import argparse
 import logging
 import os
@@ -14,8 +14,6 @@ import local
 import vnc
 
 def main():
-    load_dotenv()
-
     logging.basicConfig(level=logging.WARNING, format='%(message)s')
     logging.getLogger("cua").setLevel(logging.DEBUG)
 
@@ -26,20 +24,20 @@ def main():
     parser.add_argument("--autoenter", dest="autoenter", default=True, action="store_true")
     parser.add_argument("--environment", dest="environment", default="linux")
     parser.add_argument("--no-input", dest="no_input", default=True, help="Whether or not to run through the demo without any input from the user", action="store_true")
-    parser.add_argument("--vm_address", dest="vm_address", help="The address of the VM to use", type=str, default=None)
+    parser.add_argument("--vm-address", dest="vm_address", help="The address of the VM to use", type=str, default=None)
     parser.add_argument("--alt-screen-size", default=False, dest="alt_screen_size", action="store_true")
     args = parser.parse_args()
 
     if args.endpoint == "azure":
-        client = cua.Client(
-            base_url=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-            bearer_token=os.environ.get("AZURE_BEARER_TOKEN"),
-            api_version="2024-12-01-preview")
-
+        base_url = os.environ.get("AZURE_OPENAI_ENDPOINT")
+        api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+        api_version = "2024-12-01-preview"
     else:
-        client = cua.Client(
-            base_url="https://api.openai.com",
-            api_key=os.environ.get("OPENAI_API_KEY"))
+        base_url = "https://api.openai.com"
+        api_key = os.environ.get("OPENAI_API_KEY")
+        api_version = None
+
+    client = cua.Client(base_url, api_key, api_version)
 
     model = args.model
 
