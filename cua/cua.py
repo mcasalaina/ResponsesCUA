@@ -109,8 +109,9 @@ class Scaler:
 class Client:
     """Responses API calling code."""
 
-    def __init__(self, base_url, api_key, api_version=None):
+    def __init__(self, base_url, bearer_token=None, api_key=None, api_version=None):
         self.base_url = base_url.rstrip('/')
+        self.bearer_token = bearer_token
         self.api_key = api_key
         self.api_version = api_version
 
@@ -126,11 +127,13 @@ class Client:
             # headers['x-ms-client-request-id'] = 'true'
             headers["accept-encoding"] = "gzip, deflate, br"
             headers["accept"] = "*/*"
-            headers["api-key"] = self.api_key
+            # headers["api-key"] = self.api_key
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
             headers["User-Agent"] = ""
             params['api-version'] = self.api_version
         else:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
+            headers["OpenAI-Beta"] = "responses=v1"
             request_url = f"{self.base_url}/v1/{url}"
         logger.debug("%s %s", method.lower(), request_url)
         if body:
