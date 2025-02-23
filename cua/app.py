@@ -9,6 +9,7 @@ import argparse
 import logging
 import os
 
+import openai_pilot
 import cua
 import local
 import vnc
@@ -32,12 +33,12 @@ def main():
         base_url = os.environ.get("AZURE_OPENAI_ENDPOINT")
         api_key = os.environ.get("AZURE_OPENAI_API_KEY")
         api_version = "2024-12-01-preview"
+        client = openai_pilot.OpenAIResponsesPilotClient(api_key, base_url, api_version)
     else:
         base_url = "https://api.openai.com"
         api_key = os.environ.get("OPENAI_API_KEY")
         api_version = None
-
-    client = cua.Client(base_url, api_key, api_version)
+        client = openai_pilot.OpenAIResponsesPilotClient(api_key)
 
     model = args.model
 

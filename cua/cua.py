@@ -2,12 +2,10 @@
 import asyncio
 import base64
 import io
-import json
 import time
 import re
 import logging
 import typing
-import requests
 import PIL
 import openai_pilot
 
@@ -106,77 +104,6 @@ class Scaler:
         y = (y - y_offset) * (self.screen_height / new_height)
         return int(x), int(y)
 
-class Client:
-    """Responses API calling code."""
-
-    def __init__(self, base_url, api_key=None, api_version=None):
-        self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
-        self.api_version = api_version
-
-    def make_request(self, method, url, body, json_print_redact_path=None):
-        if json_print_redact_path is None:
-            json_print_redact_path = []
-        headers = {
-            "x-ms-enable-preview": "true",
-        }
-        params = {}
-        if self.base_url.endswith("openai.azure.com"):
-            request_url = f"{self.base_url}/openai/{url}"
-            # headers['x-ms-client-request-id'] = 'true'
-            headers["api-key"] = self.api_key
-            headers["Authorization"] = f"Bearer {self.api_key}"
-            params['api-version'] = self.api_version
-        else:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-            headers["OpenAI-Beta"] = "responses=v1"
-            request_url = f"{self.base_url}/v1/{url}"
-        logger.debug("%s %s", method.lower(), request_url)
-        if body:
-            self._pretty_print_json_obj(body, json_print_redact_path)
-        if url == "files" and body["file"]:
-            # For file uploads, send a multipart/form-data request
-            with open(body["file"], "rb") as file:
-                data = {"purpose": body["purpose"]}
-                files = {"file": (body["file"], file)}
-                response = requests.request(method, request_url, data=data, files=files, headers=headers, params=params, timeout=60)
-        else:
-            if url.startswith("vector_stores"):
-                headers["OpenAI-Beta"] = "assistants=v2"
-            data = body if method == "POST" else None
-            response = requests.request(method, request_url, json=data, headers=headers, params=params, timeout=60)
-        if response.status_code >= 400:
-            body = json.loads(response.content)
-            request_id = response.headers.get("X-Request-ID")
-            raise openai_pilot.OpenAIError(request_id=request_id, status_code=response.status_code, message=body)
-        self._pretty_print_json_obj(response.json())
-        logger.debug("Request id: %s", response.headers.get('X-Request-ID'))
-        return response.json()
-
-    def _pretty_print_json_obj(self, json_obj, json_print_redact_path=None):
-        if json_print_redact_path is None:
-            json_print_redact_path = []
-        def redact_keys(obj, path=""):
-            if not json_print_redact_path:
-                return obj
-            if isinstance(obj, dict):
-                return {
-                    key: (
-                        redact_keys(value, f"{path}.{key}" if path else f".{key}")
-                        if (f"{path}.{key}" if path else f".{key}") not in json_print_redact_path
-                        else "... (skipped)"
-                    )
-                    for key, value in obj.items()
-                }
-            if isinstance(obj, list):
-                return [redact_keys(item, f"{path}[{index}]") for index, item in enumerate(obj)]
-            return obj
-
-        redacted_obj = redact_keys(json_obj, path="")
-        json_str = json.dumps(redacted_obj, indent=4, sort_keys=True)
-        json_str = json_str.replace("\\n", "\n")
-        logger.debug(json_str)
-
 class Agent:
     """CUA agent to start and continue task execution"""
 
@@ -188,17 +115,13 @@ class Agent:
         self.step_count = 0
 
     def start_task(self, user_message):
-        body = {
-            "model": self.model,
-            "input": user_message,
-            "tools": [{
-                "type": "computer-preview",
-                "display_width": self.machine.width,
-                "display_height": self.machine.height,
-                "environment": self.machine.environment,
-            }],
-        }
-        response = self.client.make_request("POST", "responses", body)
+        tools = [{
+            "type": "computer-preview",
+            "display_width": self.machine.width,
+            "display_height": self.machine.height,
+            "environment": self.machine.environment,
+        }]
+        response = self.client.beta.responses.create(self.model, input=user_message, tools=tools)
         self.state = State(response)
         self.step_count = 0
 
@@ -211,8 +134,8 @@ class Agent:
     def continue_task(self, user_message=""):
         self.step_count += 1
         logger.debug("\n---- Step %s ----", self.step_count)
-
         screenshot = ""
+        previous_response_id = self.state.previous_response_id
         if self.state.next_action == "computer_tool_output":
             action = self.state.computer_action
             action_args = self.state.computer_action_args
@@ -223,45 +146,32 @@ class Agent:
             if screenshot:
                 screenshot = base64.b64encode(screenshot).decode("utf-8")
                 logger.debug("screenshot %s...", screenshot[:20])
-
-        body = {
-            "model": self.model,
-            "previous_response_id": self.state.previous_response_id,
-            "tools": [{
-                "type": "computer-preview",
-                "display_width": self.machine.width,
-                "display_height": self.machine.height,
-                "environment": self.machine.environment,
-            }],
-            "input": (
-                [{
-                    "type": "computer_call_output",
-                    "call_id": self.state.previous_computer_id,
-                    "output": {
-                        "type": "input_image",
-                        "image_url": f"data:image/png;base64,{screenshot}",
-                    },
-                }]
-                if self.state.next_action == "computer_tool_output"
-                else user_message
-            ),
-        }
-        next_response = self._may_retry(self.client.make_request, "POST", "responses", body,
-            json_print_redact_path=(
-                [".input[0].output.image_url"]
-                if self.state.next_action == "computer_tool_output"
-                else []
-            ),
-        )
-        self.state = State(next_response)
-
-    def _may_retry(self, func, *args, **kwargs):
+        if self.state.next_action == "computer_tool_output":
+            data = [{
+                "type": "computer_call_output",
+                "call_id": self.state.previous_computer_id,
+                "output": {
+                    "type": "input_image",
+                    "image_url": f"data:image/png;base64,{screenshot}",
+                }
+            }]
+        else:
+            data = user_message
+        tools = [{
+            "type": "computer-preview",
+            "display_width": self.machine.width,
+            "display_height": self.machine.height,
+            "environment": self.machine.environment,
+        }]
+        self.state = None
         retry = 10
         wait_time = 0
         while retry > 0:
             try:
                 time.sleep(wait_time)
-                return func(*args, **kwargs)
+                next_response = self.client.beta.responses.create(self.model, previous_response_id, input=data, tools=tools)
+                self.state = State(next_response)
+                return
             except openai_pilot.OpenAIError as oaierr:
                 if oaierr.status_code == 429:
                     error = oaierr.message["error"]
@@ -284,4 +194,3 @@ class Agent:
                 logger.critical("Error: %s", error)
                 retry = 0
         logger.critical("Max retries exceeded.")
-        return None
