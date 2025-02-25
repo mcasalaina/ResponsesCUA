@@ -11,36 +11,38 @@ import openai_pilot
 
 logger = logging.getLogger(__name__)
 
-class State:
+class State: # pylint: disable=too-many-instance-attributes
     "Tracking and controlling the state."
 
     previous_response_id: str
-    next_action: typing.Literal["user_interaction", "computer_tool_output"]
+    next_action: typing.Literal["user_interaction", "computer_call_output"]
     previous_computer_id: str = ""
     computer_action: str = ""
     computer_action_args: dict = {}
-    output_text: str = ""
+    pending_safety_checks: list = []
+    last_message: str = ""
 
     def __init__(self, response):
         assert response["status"] == "completed"
         self.response = response
         self.next_action = ""
         self.previous_response_id = response["id"]
-        self.output_text = []
+
 
         # If the item is a computer call, setting the next action and passing the action arguments.
         for item in response["output"]:
             if item.get("type") == "computer_call":
-                self.next_action = "computer_tool_output"
-                self.previous_computer_id = item["id"]
+                self.next_action = "computer_call_output"
+                self.previous_computer_id = item["call_id"] if "call_id" in item else item["id"]
                 self.computer_action = item["action"]["type"]
                 self.computer_action_args = {k: v for k, v in item["action"].items() if k != "type"}
+                self.pending_safety_checks = item.get("pending_safety_checks", [])
             else:
                 self.next_action = "user_interaction"
                 if item.get("type") == "message":
                     for content in item["content"]:
                         if content.get("type") == "output_text":
-                            self.output_text.append(content["text"])
+                            self.last_message += content["text"]
 
 class Scaler:
     """Wrapper for a machine instance that performs resizing and coordinate translation."""
@@ -129,24 +131,26 @@ class Agent:
         return self.state.next_action == "user_interaction"
 
     def requires_consent(self):
-        return self.state.next_action == "computer_tool_output"
+        return self.state.next_action == "computer_call_output"
 
-    def continue_task(self, user_message=""):
+    def requires_safety_check(self):
+        return self.state.pending_safety_checks
+
+    def continue_task(self, user_message=""): # pylint: disable=too-many-branches
         self.step_count += 1
         logger.debug("\n---- Step %s ----", self.step_count)
         screenshot = ""
         previous_response_id = self.state.previous_response_id
-        if self.state.next_action == "computer_tool_output":
+        if self.state.next_action == "computer_call_output":
             action = self.state.computer_action
             action_args = self.state.computer_action_args
             logger.info("action %s %s", action, action_args)
-            screenshot = asyncio.run(
-                self.machine.handle_tool_call(action, action_args)
-            )
+            screenshot = asyncio.run(self.machine.handle_tool_call(action, action_args))
             if screenshot:
                 screenshot = base64.b64encode(screenshot).decode("utf-8")
                 logger.debug("screenshot %s...", screenshot[:20])
-        if self.state.next_action == "computer_tool_output":
+        data = user_message
+        if self.state.next_action == "computer_call_output":
             data = [{
                 "type": "computer_call_output",
                 "call_id": self.state.previous_computer_id,
@@ -155,8 +159,8 @@ class Agent:
                     "image_url": f"data:image/png;base64,{screenshot}",
                 }
             }]
-        else:
-            data = user_message
+            if self.state.pending_safety_checks:
+                data["acknowledged_safety_checks"] = self.state.pending_safety_checks
         tools = [{
             "type": "computer-preview",
             "display_width": self.machine.width,

@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--instructions", dest="instructions", help="Instructions to follow", default="Open web browser and go to microsoft.com.")
     parser.add_argument("--model", dest="model", default="computer-use-preview")
     parser.add_argument("--endpoint", default="azure", help="The endpoint to use, either openai or azure")
-    parser.add_argument("--autoenter", dest="autoenter", default=True, action="store_true")
+    parser.add_argument("--autoplay", dest="autoplay", help="Autoplay VM actions without confirmation, only pause when the turn ends", action="store_true", default=True)
     parser.add_argument("--environment", dest="environment", default="linux")
     parser.add_argument("--no-input", dest="no_input", default=True, help="Whether or not to run through the demo without any input from the user", action="store_true")
     parser.add_argument("--vm-address", dest="vm_address", help="The address of the VM to use", type=str, default=None)
@@ -58,10 +58,12 @@ def main():
     agent.start_task(user_message)
     while True:
         user_message = None
-        if agent.requires_consent() and not args.autoenter:
+        if agent.requires_consent() and not args.autoplay:
             input("Press Enter to run computer tool...")
+        elif agent.requires_safety_check() and not args.autoplay:
+            input(f"Press Enter to acknowledge the following safety checks: {agent.requires_safety_check()}...")
         elif agent.requires_user_input():
-            print(f"Agent: {" ".join(agent.state.output_text)}")
+            print(f"\nAgent: {agent.state.last_message}\n")
             user_message = input("Please enter your message to continue: ")
         agent.continue_task(user_message)
 
