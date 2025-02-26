@@ -58,12 +58,13 @@ def main():
     agent.start_task(user_message)
     while True:
         user_message = None
+        if agent.state.last_message:
+            print(f"\nAgent: {agent.state.last_message}\n")
         if agent.requires_consent() and not args.autoplay:
             input("Press Enter to run computer tool...")
         elif agent.requires_safety_check() and not args.autoplay:
             input(f"Press Enter to acknowledge the following safety checks: {agent.requires_safety_check()}...")
         elif agent.requires_user_input():
-            print(f"\nAgent: {agent.state.last_message}\n")
             user_message = input("Please enter your message to continue: ")
         agent.continue_task(user_message)
 
