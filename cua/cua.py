@@ -59,9 +59,10 @@ class Scaler:
         if action in ("click", "double_click", "move", "scroll"):
             action_args["x"], action_args["y"] = self._point_to_screen_coords(action_args["x"], action_args["y"])
         elif action == "drag":
-            path = action_args["path"]
-            for point in path:
-                point["x"], point["y"] = self._point_to_screen_coords(point["x"], point["y"])
+            for point in action_args["path"]:
+                x, y = self._point_to_screen_coords(point[0], point[1])
+                point[0] = x
+                point[1] = y
 
     async def handle_tool_call(self, action: str, action_args: dict) -> bytearray:
         # Adjust the action arguments to match the machine coordinate system
