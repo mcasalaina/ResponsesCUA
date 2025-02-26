@@ -28,7 +28,6 @@ class State: # pylint: disable=too-many-instance-attributes
         self.next_action = ""
         self.previous_response_id = response["id"]
 
-
         # If the item is a computer call, setting the next action and passing the action arguments.
         for item in response["output"]:
             if item.get("type") == "computer_call":
@@ -74,37 +73,21 @@ class Scaler:
         buffer = io.BytesIO(screenshot)
         image = PIL.Image.open(buffer)
         self.screen_width, self.screen_height = image.size
-        aspect_ratio = self.screen_width / self.screen_height
-        if aspect_ratio > 1:
-            new_width = self.width
-            new_height = int(self.width / aspect_ratio)
-        else:
-            new_height = self.height
-            new_width = int(self.height * aspect_ratio)
+        ratio = min(self.width / self.screen_width, self.height / self.screen_height)
+        new_width = int(self.screen_width * ratio)
+        new_height = int(self.screen_height * ratio)
         resized_image = image.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
-        padded_image = PIL.Image.new("RGB", (self.width, self.height), (0, 0, 0))
-        x_offset = (self.width - new_width) // 2
-        y_offset = (self.height - new_height) // 2
-        padded_image.paste(resized_image, (x_offset, y_offset))
-        padded_image_buffer = io.BytesIO()
-        padded_image.save(padded_image_buffer, format="PNG")
-        padded_image_buffer.seek(0)
-        return bytearray(padded_image_buffer.getvalue())
+        image = PIL.Image.new("RGB", (self.width, self.height), (0, 0, 0))
+        image.paste(resized_image, (0, 0))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return bytearray(buffer.getvalue())
 
     def _point_to_screen_coords(self, x, y):
-        aspect_ratio = self.screen_width / self.screen_height
-        if aspect_ratio > 1:
-            new_width = self.width
-            new_height = int(self.width / aspect_ratio)
-            x_offset = 0
-            y_offset = (self.height - new_height) // 2
-        else:
-            new_height = self.height
-            new_width = int(self.height * aspect_ratio)
-            x_offset = (self.width - new_width) // 2
-            y_offset = 0
-        x = (x - x_offset) * (self.screen_width / new_width)
-        y = (y - y_offset) * (self.screen_height / new_height)
+        ratio = min(self.width / self.screen_width, self.height / self.screen_height)
+        x = x / ratio
+        y = y / ratio
         return int(x), int(y)
 
 class Agent:
