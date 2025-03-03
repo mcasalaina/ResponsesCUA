@@ -56,25 +56,24 @@ class ResponsesClient:
         top_p: Optional[float] = None,
         parallel_tool_calls: Optional[bool] = None,
     ) -> Json:
+        data = {
+            "model": model,
+            "previous_response_id": previous_response_id,
+            "input": input,
+            "tool_output": tool_output,
+            "include": include,
+            "tools": tools,
+            "metadata": metadata,
+            "temperature": temperature,
+            "top_p": top_p,
+            "parallel_tool_calls": parallel_tool_calls,
+        }
         if self.base_url.endswith("openai.azure.com"):
             url = f"{self.base_url}/openai/responses?api-version={self.api_version}"
         else:
             url = f"{self.base_url}/v1/responses"
-        return self._post(
-            url,
-            data={
-                "model": model,
-                "previous_response_id": previous_response_id,
-                "input": input,
-                "tool_output": tool_output,
-                "include": include,
-                "tools": tools,
-                "metadata": metadata,
-                "temperature": temperature,
-                "top_p": top_p,
-                "parallel_tool_calls": parallel_tool_calls,
-            },
-        )
+            data["truncation"] = "auto"
+        return self._post(url, data=data)
 
     def retrieve(self, response_id: str, include: Optional[list[str]] = None) -> Json:
         params = []
