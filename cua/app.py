@@ -1,6 +1,5 @@
 '''
-This is a simple example of how to use the CUA model along with the Responses API.
-When running the script, you will be prompted to give the CUA model a task to complete.
+This is a basic example of how to use the CUA model along with the Responses API.
 The CUA model will take the screenshot of the current screen, and then take action to try and complete the task.
 Make sure to install the required packages before running the script.
 '''
@@ -24,9 +23,7 @@ def main():
     parser.add_argument("--endpoint", default="azure", help="The endpoint to use, either openai or azure")
     parser.add_argument("--autoplay", dest="autoplay", help="Autoplay VM actions without confirmation, only pause when the turn ends", action="store_true", default=True)
     parser.add_argument("--environment", dest="environment", default="linux")
-    parser.add_argument("--no-input", dest="no_input", default=True, help="Whether or not to run through the demo without any input from the user", action="store_true")
     parser.add_argument("--vm-address", dest="vm_address", help="The address of the VM to use", type=str, default=None)
-    parser.add_argument("--alt-screen-size", default=False, dest="alt_screen_size", action="store_true")
     args = parser.parse_args()
 
     if args.endpoint == "azure":
@@ -46,7 +43,7 @@ def main():
     machine = local.Machine() if args.vm_address is None else vnc.Machine(address=args.vm_address, environment=args.environment)
 
     # Scaler is used to resize the screen to a smaller size
-    size = (1920, 1080) if args.alt_screen_size else (1024, 768)
+    size = (1024, 768)
     machine = cua.Scaler(*size, machine)
 
     # Agent to run the CUA model and keep track of state

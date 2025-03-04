@@ -7,7 +7,7 @@ from typing import Iterator, Literal
 from vncdotool import api
 
 class Machine:
-    """Controls a remove computer by using VNC to take screenshots and perform actions."""
+    """Controls a remote computer by using VNC to take screenshots and perform actions."""
 
     def __init__(self, width=1024, height=768, address=None, environment="browser"):
         self.width = width
