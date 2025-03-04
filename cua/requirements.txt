@@ -1,4 +1,3 @@
 pyautogui
 requests
 vncdotool
-python-dotenv

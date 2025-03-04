@@ -5,9 +5,7 @@ This sample supports both a local computer or a remote machine served using VNC.
 
 This pretty much works, although we're still working through some bugs in the vnc commands...
 
-# Setup
-
-## Setup the environment
+# Setup the environment
 
 1. Clone the repo
 2. Run `pip install -r requirements.txt`
@@ -26,13 +24,13 @@ This pretty much works, although we're still working through some bugs in the vn
         AZURE_OPENAI_API_KEY="<YOUR_BEARER_TOKEN_OBTAINED_ABOVE>"
         ```
 
-## Run with a local machine
+# Run with a local machine
 
 Run `python app.py --endpoint azure --instructions "Find me a dishwasher safe pasta spoon on Amazon."`
 
-## Run with a remote VNC machine
+# Run with a remote VNC machine
 
-### Linux VM Creation in Windows
+## Linux VM Creation in Windows
 
 Note: this is most easily ran directly from windows, which avoids additional networking configs to get WSL talking to hyper-v
 
@@ -66,7 +64,7 @@ Once you've got the Linux VM installed, open a terminal.
   ```
 * **Optional:** connect to the VM from hyper-v so you can watch the computer control model in action.
 
-### How To Use The Script
+## How To Use The Script
 
 1. Make sure your environment is set up as described above.
 2. Make sure your VM is running and the VNC server is started.
