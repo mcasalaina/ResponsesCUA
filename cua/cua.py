@@ -45,48 +45,73 @@ class State: # pylint: disable=too-many-instance-attributes
                 raise NotImplementedError(f"Unsupported response output type '{item.type}'.")
 
 class Scaler:
-    """Wrapper for a machine instance that performs resizing and coordinate translation."""
+    """Wrapper for a computer instance that performs resizing and coordinate translation."""
 
-    def __init__(self, width, height, machine):
-        self.width = width
-        self.height = height
-        self.machine = machine
-        self.environment = machine.environment
+    def __init__(self, width, height, computer):
+        self.dimensions = (width, height)
+        self.computer = computer
+        self.environment = computer.environment
         self.screen_width = -1
         self.screen_height = -1
 
-    async def take_action(self, action: str, action_args: dict) -> str:
-        if action in ("click", "double_click", "move", "scroll"):
-            action_args["x"], action_args["y"] = self._point_to_screen_coords(action_args["x"], action_args["y"])
-        elif action == "drag":
-            for point in action_args["path"]:
-                x, y = self._point_to_screen_coords(point[0], point[1])
-                point[0] = x
-                point[1] = y
-
-    async def handle_tool_call(self, action: str, action_args: dict) -> bytearray:
-        # Adjust the action arguments to match the machine coordinate system
-        if action not in ("initialize", "get", "screenshot"):
-            await self.take_action(action, action_args)
-        # Call the underlying machine. Screenshot will be taken after the action
-        screenshot = await self.machine.handle_tool_call(action, action_args)
+    def screenshot(self) -> str:
+        # Call the underlying computer. Screenshot will be taken after the action
+        screenshot = self.computer.screenshot()
+        screenshot = base64.b64decode(screenshot)
         # Scale the screenshot
         buffer = io.BytesIO(screenshot)
         image = PIL.Image.open(buffer)
         self.screen_width, self.screen_height = image.size
-        ratio = min(self.width / self.screen_width, self.height / self.screen_height)
+        width, height = self.dimensions
+        ratio = min(width / self.screen_width, height / self.screen_height)
         new_width = int(self.screen_width * ratio)
         new_height = int(self.screen_height * ratio)
         resized_image = image.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
-        image = PIL.Image.new("RGB", (self.width, self.height), (0, 0, 0))
+        image = PIL.Image.new("RGB", (width, height), (0, 0, 0))
         image.paste(resized_image, (0, 0))
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         buffer.seek(0)
-        return bytearray(buffer.getvalue())
+        data = bytearray(buffer.getvalue())
+        return base64.b64encode(data).decode("utf-8")
+
+    def click(self, x: int, y: int, button: str = "left") -> None:
+        x, y = self._point_to_screen_coords(x, y)
+        self.computer.click(x, y, button=button)
+
+    def double_click(self, x: int, y: int) -> None:
+        x, y = self._point_to_screen_coords(x, y)
+        self.computer.double_click(x, y)
+
+    def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
+        x, y = self._point_to_screen_coords(x, y)
+        scroll_x = int(scroll_x * self.width / self.screen_width)
+        scroll_y = int(scroll_y * self.height / self.screen_height)
+        self.computer.scroll(x, y, scroll_x, scroll_y)
+
+    def type(self, text: str) -> None:
+        self.computer.type(text)
+
+    def wait(self, ms: int = 1000) -> None:
+        self.computer.wait(ms)
+
+    def move(self, x: int, y: int) -> None:
+        x, y = self._point_to_screen_coords(x, y)
+        self.computer.move(x, y)
+
+    def keypress(self, keys: list[str]) -> None:
+        self.computer.keypress(keys)
+
+    def drag(self, path: list[dict[str, int]]) -> None:
+        for point in path:
+            x, y = self._point_to_screen_coords(point['x'], point['y'])
+            point['x'] = x
+            point['y'] = y
+        self.computer.drag(path)
 
     def _point_to_screen_coords(self, x, y):
-        ratio = min(self.width / self.screen_width, self.height / self.screen_height)
+        width, height = self.dimensions
+        ratio = min(width / self.screen_width, height / self.screen_height)
         x = x / ratio
         y = y / ratio
         return int(x), int(y)
@@ -94,10 +119,10 @@ class Scaler:
 class Agent:
     """CUA agent to start and continue task execution"""
 
-    def __init__(self, client, model, machine):
+    def __init__(self, client, model, computer):
         self.client = client
         self.model = model
-        self.machine = machine
+        self.computer = computer
         self.state = None
         self.step_count = 0
         self.azure = isinstance(client, openai.AzureOpenAI) # TODO
@@ -135,10 +160,16 @@ class Agent:
         if self.state.next_action == "computer_call_output":
             action = self.state.computer_action
             action_args = self.state.computer_action_args
+            if action == "drag": # TODO Workround
+                if not self.azure:
+                    action_args["path"] = [{"x": p.x, "y": p.y} for p in action_args["path"]]
+                else:
+                    action_args["path"] = [{"x": p[0], "y": p[1]} for p in action_args["path"]]
             logger.info("action %s %s", action, action_args)
-            screenshot = asyncio.run(self.machine.handle_tool_call(action, action_args))
+            method = getattr(self.computer, action)
+            method(**action_args)
+            screenshot = self.computer.screenshot()
             if screenshot:
-                screenshot = base64.b64encode(screenshot).decode("utf-8")
                 logger.debug("screenshot %s...", screenshot[:20])
         if self.state.next_action == "computer_call_output":
             next_input = openai.types.responses.response_input_param.ComputerCallOutput(
@@ -197,7 +228,7 @@ class Agent:
     def computer_tool(self):
         return openai.types.responses.ComputerToolParam(
             type = "computer_use_preview" if not self.azure else "computer-preview", # TODO
-            display_width = self.machine.width,
-            display_height = self.machine.height,
-            environment = self.machine.environment
+            display_width = self.computer.dimensions[0],
+            display_height = self.computer.dimensions[1],
+            environment = self.computer.environment
         )
