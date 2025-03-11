@@ -7,7 +7,7 @@ import re
 import logging
 import typing
 import PIL
-import openai_pilot
+import openai
 
 logger = logging.getLogger(__name__)
 
@@ -23,25 +23,26 @@ class State: # pylint: disable=too-many-instance-attributes
     last_message: str = ""
 
     def __init__(self, response):
-        assert response["status"] == "completed"
+        assert response.status == "completed"
         self.response = response
         self.next_action = ""
-        self.previous_response_id = response["id"]
+        self.previous_response_id = response.id
 
         # If the item is a computer call, setting the next action and passing the action arguments.
-        for item in response["output"]:
-            if item.get("type") == "computer_call":
+        for item in response.output:
+            if item.type == "computer_call":
                 self.next_action = "computer_call_output"
-                self.previous_computer_id = item["call_id"] if "call_id" in item else item["id"]
-                self.computer_action = item["action"]["type"]
-                self.computer_action_args = {k: v for k, v in item["action"].items() if k != "type"}
-                self.pending_safety_checks = item.get("pending_safety_checks", [])
-            else:
+                self.previous_computer_id = item.call_id if hasattr(item, 'call_id') else item.id # TODO
+                self.computer_action = item.action.type
+                self.computer_action_args = {k: v for k, v in vars(item.action).items() if k != "type"}
+                self.pending_safety_checks = item.pending_safety_checks
+            elif item.type == "reasoning":
+                pass
+            elif item.type == "message":
                 self.next_action = "user_interaction"
-                if item.get("type") == "message":
-                    for content in item["content"]:
-                        if content.get("type") == "output_text":
-                            self.last_message += content["text"]
+                self.last_message += item.content[-1].text
+            else:
+                raise NotImplementedError(f"Unsupported response output type '{item.type}'.")
 
 class Scaler:
     """Wrapper for a machine instance that performs resizing and coordinate translation."""
@@ -99,18 +100,18 @@ class Agent:
         self.machine = machine
         self.state = None
         self.step_count = 0
-        self.azure = client.base_url.endswith("openai.azure.com") # TODO
+        self.azure = isinstance(client, openai.AzureOpenAI) # TODO
 
     def start_task(self, user_message):
         tools = [self.computer_tool()]
         if not self.azure: # TODO
-            response = self.client.beta.responses.create(
+            response = self.client.responses.create(
                 model = self.model,
                 input = user_message,
                 tools = tools,
                 truncation = "auto")
         else:
-            response = self.client.beta.responses.create(
+            response = self.client.responses.create(
                 model = self.model,
                 input = user_message,
                 tools = tools)
@@ -123,7 +124,7 @@ class Agent:
     def requires_consent(self):
         return self.state.next_action == "computer_call_output"
 
-    def requires_safety_check(self):
+    def pending_safety_checks(self):
         return self.state.pending_safety_checks
 
     def continue_task(self, user_message=""): # pylint: disable=too-many-branches
@@ -140,66 +141,63 @@ class Agent:
                 screenshot = base64.b64encode(screenshot).decode("utf-8")
                 logger.debug("screenshot %s...", screenshot[:20])
         if self.state.next_action == "computer_call_output":
-            next_input = [{
-                "type": "computer_call_output",
-                "call_id": self.state.previous_computer_id,
-                "output": {
-                    "type": "computer_screenshot" if not self.azure else "input_image", # TODO
-                    "image_url": f"data:image/png;base64,{screenshot}",
-                }
-            }]
+            next_input = openai.types.responses.response_input_param.ComputerCallOutput(
+                type = "computer_call_output",
+                call_id = self.state.previous_computer_id,
+                output = openai.types.responses.response_input_param.ComputerCallOutputOutput(
+                    type = "computer_screenshot" if not self.azure else "input_image", # TODO
+                    image_url = f"data:image/png;base64,{screenshot}"),
+                acknowledged_safety_checks = self.state.pending_safety_checks)
         else:
-            next_input = user_message
-            # if self.state.pending_safety_checks:
-            #     next_input["acknowledged_safety_checks"] = self.state.pending_safety_checks
+            next_input = openai.types.responses.response_input_param.Message(
+                role = "user",
+                content = user_message)
         tools = [self.computer_tool()]
         self.state = None
-        retry = 10
+        retry = 16
         wait_time = 0
         while retry > 0:
             try:
                 time.sleep(wait_time)
-                if not self.azure: # TODO
-                    next_response = self.client.beta.responses.create(
+                if not self.azure:
+                    next_response = self.client.responses.create(
                         model = self.model,
-                        input = next_input,
+                        input = [next_input],
                         previous_response_id = previous_response_id,
-                        tools=tools,
+                        tools = tools,
                         truncation = "auto")
                 else:
-                    next_response = self.client.beta.responses.create(
+                    next_response = self.client.responses.create(
                         model = self.model,
-                        input = next_input,
+                        input = [next_input],
                         previous_response_id = previous_response_id,
-                        tools=tools)
+                        tools = tools)
                 self.state = State(next_response)
                 return
-            except openai_pilot.OpenAIError as oaierr:
-                if oaierr.status_code == 429:
-                    error = oaierr.message["error"]
+            except openai.OpenAIError as error:
+                if error.status_code == 429:
                     retry -= 1
                     wait_time = 10
-                    if 'message' in error:
-                        message = error["message"]
-                        match = re.search(r"Please try again in (\d+)s", message)
+                    if error.code == "rate_limit_exceeded" and hasattr(error, 'message'):
+                        match = re.search(r"Please try again in (\d+)s", error.message)
                         if match:
                             wait_time = int(match.group(1))
                             logger.info("Rate limit exceeded. Waiting for %s seconds.", wait_time)
                         else:
-                            logger.critical("%s. Cannot parse wait time.", oaierr.message)
+                            logger.info("Rate limit exceeded. Cannot parse wait time: %s", error.message)
                     elif 'type' in error and error['type'] == 'rate_limit_error':
                         logger.info("Rate limit error. Waiting for %s seconds.", wait_time)
                 else:
-                    logger.critical(str(oaierr))
+                    logger.critical(str(error))
             except Exception as error: # pylint: disable=broad-except
                 logger.critical("Error: %s", error)
                 retry = 0
         logger.critical("Max retries exceeded.")
 
     def computer_tool(self):
-        return {
-            "type": "computer_use_preview" if not self.azure else "computer-preview", # TODO
-            "display_width": self.machine.width,
-            "display_height": self.machine.height,
-            "environment": self.machine.environment,
-        }
+        return openai.types.responses.ComputerToolParam(
+            type = "computer_use_preview" if not self.azure else "computer-preview", # TODO
+            display_width = self.machine.width,
+            display_height = self.machine.height,
+            environment = self.machine.environment
+        )
