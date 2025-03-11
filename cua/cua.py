@@ -33,11 +33,6 @@ class State: # pylint: disable=too-many-instance-attributes
                 self.previous_computer_id = item.call_id
                 self.computer_action = item.action.type
                 self.computer_action_args = {k: v for k, v in vars(item.action).items() if k != "type"}
-                if self.computer_action == "drag" and len(self.computer_action_args["path"]) > 0: # TODO Workround
-                    if hasattr(self.computer_action_args["path"][0], "x"):
-                        self.computer_action_args["path"] = [{"x": p.x, "y": p.y} for p in self.computer_action_args["path"]]
-                    else:
-                        self.computer_action_args["path"] = [{"x": p[0], "y": p[1]} for p in self.computer_action_args["path"]]
                 self.pending_safety_checks = item.pending_safety_checks
             elif item.type == "reasoning":
                 self.reasoning_summary = "".join([summary["text"] for summary in item.summary])
@@ -105,9 +100,9 @@ class Scaler:
 
     def drag(self, path: list[dict[str, int]]) -> None:
         for point in path:
-            x, y = self._point_to_screen_coords(point['x'], point['y'])
-            point['x'] = x
-            point['y'] = y
+            x, y = self._point_to_screen_coords(point.x, point.y)
+            point.x = x
+            point.y = y
         self.computer.drag(path)
 
     def _point_to_screen_coords(self, x, y):
@@ -125,8 +120,6 @@ class Agent:
         self.model = model
         self.computer = computer
         self.state = None
-        self.azure = isinstance(client, openai.AzureOpenAI) # TODO
-
 
     def start_task(self, user_message):
         tools = [self.computer_tool()]
@@ -172,7 +165,7 @@ class Agent:
                 type = "computer_call_output",
                 call_id = self.state.previous_computer_id,
                 output = openai.types.responses.response_input_param.ComputerCallOutputOutput(
-                    type = "computer_screenshot" if not self.azure else "input_image", # TODO
+                    type = "computer_screenshot",
                     image_url = f"data:image/png;base64,{screenshot}"),
                 acknowledged_safety_checks = self.state.pending_safety_checks)
         else:
@@ -191,6 +184,7 @@ class Agent:
                     input = [next_input],
                     previous_response_id = previous_response_id,
                     tools = tools,
+                    reasoning = { "generate_summary": "concise" },
                     truncation = "auto")
                 self.state = State(next_response)
                 return
@@ -216,7 +210,7 @@ class Agent:
 
     def computer_tool(self):
         return openai.types.responses.ComputerToolParam(
-            type = "computer_use_preview" if not self.azure else "computer-preview", # TODO
+            type = "computer_use_preview",
             display_width = self.computer.dimensions[0],
             display_height = self.computer.dimensions[1],
             environment = self.computer.environment

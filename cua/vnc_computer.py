@@ -40,7 +40,7 @@ class VNCComputer:
             button=1))
 
     def drag(self, path: list[dict[str, int]]) -> None:
-        path = [(point["x"], point["y"]) for point in path]
+        path = [(point.x, point.y) for point in path]
         asyncio.run(self.vnc.drag_mouse(path))
 
     def keypress(self, keys: list[str]) -> None:
