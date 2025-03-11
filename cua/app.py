@@ -8,7 +8,7 @@ import argparse
 import logging
 import os
 
-import openai_pilot
+import openai
 import cua
 import local
 import vnc
@@ -27,15 +27,13 @@ def main():
     args = parser.parse_args()
 
     if args.endpoint == "azure":
-        base_url = os.environ.get("AZURE_OPENAI_ENDPOINT")
-        api_key = os.environ.get("AZURE_OPENAI_API_KEY")
-        api_version = "2024-12-01-preview" # TODO 2025-03-01-preview
-        client = openai_pilot.OpenAIResponsesPilotClient(api_key, base_url, api_version)
+        base_url = os.environ.get("AZURE_OPENAI_ENDPOINT") # TODO
+        api_key = os.environ.get("AZURE_OPENAI_API_KEY") # TODO
+        api_version = "2024-12-01-preview" # TODO: 2025-03-01-preview
+        client = openai.AzureOpenAI(azure_endpoint=base_url, api_key=api_key, api_version=api_version,
+            default_headers = {"x-ms-enable-preview": "true"})
     else:
-        base_url = "https://api.openai.com"
-        api_key = os.environ.get("OPENAI_API_KEY")
-        api_version = None
-        client = openai_pilot.OpenAIResponsesPilotClient(api_key)
+        client = openai.OpenAI()
 
     model = args.model
 
@@ -59,7 +57,7 @@ def main():
             print(f"\nAgent: {agent.state.last_message}\n")
         if agent.requires_consent() and not args.autoplay:
             input("Press Enter to run computer tool...")
-        elif agent.requires_safety_check() and not args.autoplay:
+        elif agent.pending_safety_checks() and not args.autoplay:
             input(f"Press Enter to acknowledge the following safety checks: {agent.requires_safety_check()}...")
         elif agent.requires_user_input():
             user_message = input("Please enter your message to continue: ")
