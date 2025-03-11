@@ -99,15 +99,21 @@ class Agent:
         self.machine = machine
         self.state = None
         self.step_count = 0
+        self.azure = client.base_url.endswith("openai.azure.com") # TODO
 
     def start_task(self, user_message):
-        tools = [{
-            "type": "computer-preview",
-            "display_width": self.machine.width,
-            "display_height": self.machine.height,
-            "environment": self.machine.environment,
-        }]
-        response = self.client.beta.responses.create(self.model, input=user_message, tools=tools)
+        tools = [self.computer_tool()]
+        if not self.azure: # TODO
+            response = self.client.beta.responses.create(
+                model = self.model,
+                input = user_message,
+                tools = tools,
+                truncation = "auto")
+        else:
+            response = self.client.beta.responses.create(
+                model = self.model,
+                input = user_message,
+                tools = tools)
         self.state = State(response)
         self.step_count = 0
 
@@ -133,31 +139,39 @@ class Agent:
             if screenshot:
                 screenshot = base64.b64encode(screenshot).decode("utf-8")
                 logger.debug("screenshot %s...", screenshot[:20])
-        data = user_message
         if self.state.next_action == "computer_call_output":
-            data = [{
+            next_input = [{
                 "type": "computer_call_output",
                 "call_id": self.state.previous_computer_id,
                 "output": {
-                    "type": "input_image",
+                    "type": "computer_screenshot" if not self.azure else "input_image", # TODO
                     "image_url": f"data:image/png;base64,{screenshot}",
                 }
             }]
-            if self.state.pending_safety_checks:
-                data["acknowledged_safety_checks"] = self.state.pending_safety_checks
-        tools = [{
-            "type": "computer-preview",
-            "display_width": self.machine.width,
-            "display_height": self.machine.height,
-            "environment": self.machine.environment,
-        }]
+        else:
+            next_input = user_message
+            # if self.state.pending_safety_checks:
+            #     next_input["acknowledged_safety_checks"] = self.state.pending_safety_checks
+        tools = [self.computer_tool()]
         self.state = None
         retry = 10
         wait_time = 0
         while retry > 0:
             try:
                 time.sleep(wait_time)
-                next_response = self.client.beta.responses.create(self.model, previous_response_id, input=data, tools=tools)
+                if not self.azure: # TODO
+                    next_response = self.client.beta.responses.create(
+                        model = self.model,
+                        input = next_input,
+                        previous_response_id = previous_response_id,
+                        tools=tools,
+                        truncation = "auto")
+                else:
+                    next_response = self.client.beta.responses.create(
+                        model = self.model,
+                        input = next_input,
+                        previous_response_id = previous_response_id,
+                        tools=tools)
                 self.state = State(next_response)
                 return
             except openai_pilot.OpenAIError as oaierr:
@@ -173,7 +187,6 @@ class Agent:
                             logger.info("Rate limit exceeded. Waiting for %s seconds.", wait_time)
                         else:
                             logger.critical("%s. Cannot parse wait time.", oaierr.message)
-                            retry = 0
                     elif 'type' in error and error['type'] == 'rate_limit_error':
                         logger.info("Rate limit error. Waiting for %s seconds.", wait_time)
                 else:
@@ -182,3 +195,11 @@ class Agent:
                 logger.critical("Error: %s", error)
                 retry = 0
         logger.critical("Max retries exceeded.")
+
+    def computer_tool(self):
+        return {
+            "type": "computer_use_preview" if not self.azure else "computer-preview", # TODO
+            "display_width": self.machine.width,
+            "display_height": self.machine.height,
+            "environment": self.machine.environment,
+        }

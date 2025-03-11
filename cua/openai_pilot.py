@@ -33,7 +33,7 @@ def compact(data: Json) -> Json:
 class ResponsesClient:
 
     def __init__(self, base_url, api_key, api_version):
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url
         self.api_version = api_version
         self.headers = {
             "Content-Type":"application/json",
@@ -51,6 +51,7 @@ class ResponsesClient:
         tool_output: Optional[list[Json]] = None,
         include: Optional[list[str]] = None,
         tools: Optional[list[Json]] = None,
+        truncation: Optional[str] = None,
         metadata: Optional[Json] = None,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
@@ -72,7 +73,8 @@ class ResponsesClient:
             url = f"{self.base_url}/openai/responses?api-version={self.api_version}"
         else:
             url = f"{self.base_url}/v1/responses"
-            data["truncation"] = "auto"
+        if truncation:
+            data["truncation"] = truncation
         return self._post(url, data=data)
 
     def retrieve(self, response_id: str, include: Optional[list[str]] = None) -> Json:
@@ -136,7 +138,7 @@ class OpenAIResponsesPilotClient:
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, api_version: Optional[str] = None):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
-        self.base_url = base_url or "https://api.openai.com"
+        self.base_url = base_url.rstrip('/') if base_url else "https://api.openai.com"
         self.api_version = api_version
 
     @property
