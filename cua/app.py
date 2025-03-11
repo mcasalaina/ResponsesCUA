@@ -10,8 +10,8 @@ import os
 
 import openai
 import cua
-import local
-import vnc
+from local_computer import LocalComputer
+from vnc_computer import VNCComputer
 
 def main():
     logging.basicConfig(level=logging.WARNING, format='%(message)s')
@@ -37,15 +37,15 @@ def main():
 
     model = args.model
 
-    # Machine is used to take screenshots and send keystrokes or mouse clicks
-    machine = local.Machine() if args.vm_address is None else vnc.Machine(address=args.vm_address, environment=args.environment)
+    # Computer is used to take screenshots and send keystrokes or mouse clicks
+    computer = LocalComputer() if args.vm_address is None else VNCComputer(address=args.vm_address, environment=args.environment)
 
     # Scaler is used to resize the screen to a smaller size
     size = (1024, 768)
-    machine = cua.Scaler(*size, machine)
+    computer = cua.Scaler(*size, computer)
 
     # Agent to run the CUA model and keep track of state
-    agent = cua.Agent(client, model, machine)
+    agent = cua.Agent(client, model, computer)
 
     # Get the user request
     user_message = args.instructions if args.instructions else input("Please enter the initial task for the computer: ")

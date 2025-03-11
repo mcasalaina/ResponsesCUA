@@ -1,4 +1,5 @@
 
+import base64
 import asyncio
 import math
 import time
@@ -6,7 +7,7 @@ from contextlib import contextmanager
 from typing import Iterator, Literal
 from vncdotool import api
 
-class Machine:
+class VNCComputer:
     """Controls a remote computer by using VNC to take screenshots and perform actions."""
 
     def __init__(self, width=1024, height=768, address=None, environment="browser"):
@@ -15,58 +16,43 @@ class Machine:
         self.vnc = VNCMachine(address)
         self.environment = environment
 
-    async def take_screenshot(self):
+    def screenshot(self):
         image_path = 'screenshot.png'
-        await self.vnc.screenshot(screenshot_name=image_path, keys=None)
+        asyncio.run(self.vnc.screenshot(screenshot_name=image_path, keys=None))
         with open(image_path, 'rb') as image_file:
-            return image_file.read()
+            data = image_file.read()
+        return base64.b64encode(data).decode("utf-8")
 
-    async def take_action(self, action: str, action_args: dict):
-        if action == "click":
-            await self.vnc.mouse_click(
-                position=(action_args["x"], action_args["y"]),
-                action="click",
-                button=1
-            )
-        elif action == "double_click":
-            await self.vnc.mouse_click(
-                position=(action_args["x"], action_args["y"]),
+    def click(self, x: int, y: int, button: str = "left") -> None:
+        asyncio.run(self.vnc.mouse_click(
+            position=(x, y),
+            action="click",
+            button=1))
+
+    def double_click(self, x: int, y: int) -> None:
+        asyncio.run(self.vnc.mouse_click(
+                position=(x, y)),
                 action="double_click",
-                button=1
-            )
-        elif action == "drag":
-            await self.vnc.drag_mouse(
-                path=action_args["path"],
-            )
-        elif action == "keypress":
-            await self.vnc.multi_key_press(
-                keys=action_args["keys"],
-            )
-        elif action == "move":
-            await self.vnc.move_mouse(
-                position=(action_args["x"], action_args["y"]),
-            )
-        elif action == "scroll":
-            await self.vnc.scroll(
-                position=(action_args["x"], action_args["y"]),
-                horizontal=action_args["scroll_x"],
-                vertical=action_args["scroll_y"],
-            )
-        elif action == "type":
-            await self.vnc.type(
-                text=action_args["text"],
-            )
-        elif action == "wait":
-            await asyncio.sleep(1)
-        else:
-            raise ValueError(f"Invalid action: {action}")
+                button=1)
 
-    async def handle_tool_call(self, action: str, action_args: dict) -> bytearray:
-        if action not in ("initialize", "get", "screenshot"):
-            await self.take_action(action, action_args)
+    def drag(self, path: list[dict[str, int]]) -> None:
+        path = [(point["x"], point["y"]) for point in path]
+        asyncio.run(self.vnc.drag_mouse(path))
 
-        # Take a screenshot after the action
-        return await self.take_screenshot()
+    def keypress(self, keys: list[str]) -> None:
+        asyncio.run(self.vnc.multi_key_press(keys))
+
+    def move(self, x: int, y: int) -> None:
+        asyncio.run(self.vnc.move_mouse(position=(x, y)))
+
+    def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
+        asyncio.run(self.vnc.scroll(position=(x, y), horizontal=scroll_x, vertical=scroll_y))
+
+    def type(self, text: str) -> None:
+        asyncio.run(self.vnc.type(text=text))
+
+    def wait(self, ms: int = 1000) -> None:
+        asyncio.sleep(1)
 
 
 # ---[ VNC ]--------------------------------------
