@@ -29,7 +29,7 @@ def main():
     if args.endpoint == "azure":
         base_url = os.environ.get("AZURE_OPENAI_ENDPOINT")
         api_key = os.environ.get("AZURE_OPENAI_API_KEY")
-        api_version = "2024-12-01-preview"
+        api_version = "2024-12-01-preview" # TODO 2025-03-01-preview
         client = openai_pilot.OpenAIResponsesPilotClient(api_key, base_url, api_version)
     else:
         base_url = "https://api.openai.com"
