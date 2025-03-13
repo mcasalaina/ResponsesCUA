@@ -58,7 +58,7 @@ def main():
         if agent.requires_consent() and not args.autoplay:
             input("Press Enter to run computer tool...")
         elif agent.pending_safety_checks() and not args.autoplay:
-            input(f"Press Enter to acknowledge the following safety checks: {agent.requires_safety_check()}...")
+            input(f"Press Enter to acknowledge the following safety checks: {agent.pending_safety_checks()}...")
         elif agent.requires_user_input():
             user_message = input("Please enter your message to continue: ")
         agent.continue_task(user_message)
