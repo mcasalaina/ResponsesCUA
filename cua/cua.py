@@ -1,5 +1,4 @@
 
-import asyncio
 import base64
 import io
 import time
@@ -15,17 +14,16 @@ class State: # pylint: disable=too-many-instance-attributes
     "Tracking and controlling the state."
 
     previous_response_id: str
-    next_action: typing.Literal["user_interaction", "computer_call_output"]
+    next_action: typing.Literal["user_interaction", "computer_call_output"] = ""
     previous_computer_id: str = ""
     computer_action: str = ""
     computer_action_args: dict = {}
     pending_safety_checks: list = []
-    last_message: str = ""
+    reasoning_summary: str = ""
+    message: str = ""
 
     def __init__(self, response):
         assert response.status == "completed"
-        self.response = response
-        self.next_action = ""
         self.previous_response_id = response.id
 
         # If the item is a computer call, setting the next action and passing the action arguments.
@@ -35,12 +33,17 @@ class State: # pylint: disable=too-many-instance-attributes
                 self.previous_computer_id = item.call_id if hasattr(item, 'call_id') else item.id # TODO
                 self.computer_action = item.action.type
                 self.computer_action_args = {k: v for k, v in vars(item.action).items() if k != "type"}
+                if self.computer_action == "drag" and len(self.computer_action_args["path"]) > 0: # TODO Workround
+                    if hasattr(self.computer_action_args["path"][0], "x"):
+                        self.computer_action_args["path"] = [{"x": p.x, "y": p.y} for p in self.computer_action_args["path"]]
+                    else:
+                        self.computer_action_args["path"] = [{"x": p[0], "y": p[1]} for p in self.computer_action_args["path"]]
                 self.pending_safety_checks = item.pending_safety_checks
             elif item.type == "reasoning":
-                pass
+                self.reasoning_summary = "".join([summary["text"] for summary in item.summary])
             elif item.type == "message":
                 self.next_action = "user_interaction"
-                self.last_message += item.content[-1].text
+                self.message += item.content[-1].text
             else:
                 raise NotImplementedError(f"Unsupported response output type '{item.type}'.")
 
@@ -85,8 +88,8 @@ class Scaler:
 
     def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        scroll_x = int(scroll_x * self.width / self.screen_width)
-        scroll_y = int(scroll_y * self.height / self.screen_height)
+        scroll_x = int(scroll_x * (self.screen_width / self.dimensions[0]))
+        scroll_y = int(scroll_y * (self.screen_height / self.dimensions[1]))
         self.computer.scroll(x, y, scroll_x, scroll_y)
 
     def type(self, text: str) -> None:
@@ -124,8 +127,8 @@ class Agent:
         self.model = model
         self.computer = computer
         self.state = None
-        self.step_count = 0
         self.azure = isinstance(client, openai.AzureOpenAI) # TODO
+
 
     def start_task(self, user_message):
         tools = [self.computer_tool()]
@@ -141,36 +144,37 @@ class Agent:
                 input = user_message,
                 tools = tools)
         self.state = State(response)
-        self.step_count = 0
 
+    @property
     def requires_user_input(self):
         return self.state.next_action == "user_interaction"
 
+    @property
     def requires_consent(self):
         return self.state.next_action == "computer_call_output"
 
+    @property
     def pending_safety_checks(self):
         return self.state.pending_safety_checks
 
+    @property
+    def reasoning_summary(self):
+        return self.state.reasoning_summary
+
+    @property
+    def message(self):
+        return self.state.message
+
     def continue_task(self, user_message=""): # pylint: disable=too-many-branches
-        self.step_count += 1
-        logger.debug("\n---- Step %s ----", self.step_count)
         screenshot = ""
         previous_response_id = self.state.previous_response_id
         if self.state.next_action == "computer_call_output":
             action = self.state.computer_action
             action_args = self.state.computer_action_args
-            if action == "drag": # TODO Workround
-                if not self.azure:
-                    action_args["path"] = [{"x": p.x, "y": p.y} for p in action_args["path"]]
-                else:
-                    action_args["path"] = [{"x": p[0], "y": p[1]} for p in action_args["path"]]
-            logger.info("action %s %s", action, action_args)
+            logger.info("%s %s", action, action_args)
             method = getattr(self.computer, action)
             method(**action_args)
             screenshot = self.computer.screenshot()
-            if screenshot:
-                logger.debug("screenshot %s...", screenshot[:20])
         if self.state.next_action == "computer_call_output":
             next_input = openai.types.responses.response_input_param.ComputerCallOutput(
                 type = "computer_call_output",
