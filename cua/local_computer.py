@@ -1,7 +1,6 @@
 
 import base64
 import io
-import logging
 import platform
 import time
 import pyautogui
@@ -53,7 +52,7 @@ class LocalComputer:
         pyautogui.write(text)
 
     def wait(self, ms: int = 1000) -> None:
-        time.sleep(1)
+        time.sleep(ms / 1000)
 
     def move(self, x: int, y: int) -> None:
         pyautogui.moveTo(x, y, duration=0.1)

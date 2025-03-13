@@ -24,16 +24,20 @@ class VNCComputer:
         return base64.b64encode(data).decode("utf-8")
 
     def click(self, x: int, y: int, button: str = "left") -> None:
+        match button:
+            case "left": button = 1
+            case "middle": button = 2
+            case "right": button = 3
         asyncio.run(self.vnc.mouse_click(
             position=(x, y),
             action="click",
-            button=1))
+            button=button))
 
     def double_click(self, x: int, y: int) -> None:
         asyncio.run(self.vnc.mouse_click(
-                position=(x, y)),
-                action="double_click",
-                button=1)
+            position=(x, y),
+            action="double_click",
+            button=1))
 
     def drag(self, path: list[dict[str, int]]) -> None:
         path = [(point["x"], point["y"]) for point in path]
@@ -52,7 +56,7 @@ class VNCComputer:
         asyncio.run(self.vnc.type(text=text))
 
     def wait(self, ms: int = 1000) -> None:
-        asyncio.sleep(1)
+        asyncio.sleep(ms / 1000)
 
 
 # ---[ VNC ]--------------------------------------
