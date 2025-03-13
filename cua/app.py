@@ -27,11 +27,11 @@ def main():
     args = parser.parse_args()
 
     if args.endpoint == "azure":
-        base_url = os.environ.get("AZURE_OPENAI_ENDPOINT") # TODO
-        api_key = os.environ.get("AZURE_OPENAI_API_KEY") # TODO
-        api_version = "2024-12-01-preview" # TODO: 2025-03-01-preview
-        client = openai.AzureOpenAI(azure_endpoint=base_url, api_key=api_key, api_version=api_version,
-            default_headers = {"x-ms-enable-preview": "true"})
+        client = openai.AzureOpenAI(
+            azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT"), # TODO
+            api_key = os.environ.get("AZURE_OPENAI_API_KEY"), # TODO
+            api_version = "2025-03-01-preview",
+            default_headers = {"x-ms-enable-preview": "true"}) # TODO
     else:
         client = openai.OpenAI()
 
@@ -50,18 +50,23 @@ def main():
     # Get the user request
     user_message = args.instructions if args.instructions else input("Please enter the initial task for the computer: ")
 
+    print(f"User: {user_message}")
     agent.start_task(user_message)
     while True:
         user_message = None
-        if agent.state.last_message:
-            print(f"\nAgent: {agent.state.last_message}\n")
-        if agent.requires_consent() and not args.autoplay:
+        if agent.requires_consent and not args.autoplay:
             input("Press Enter to run computer tool...")
-        elif agent.pending_safety_checks() and not args.autoplay:
-            input(f"Press Enter to acknowledge the following safety checks: {agent.pending_safety_checks()}...")
-        elif agent.requires_user_input():
-            user_message = input("Please enter your message to continue: ")
+        elif agent.pending_safety_checks and not args.autoplay:
+            input(f"Press Enter to acknowledge the following safety checks: {agent.pending_safety_checks}...")
+        elif agent.requires_user_input:
+            user_message = input("User: ")
         agent.continue_task(user_message)
+        print("")
+        if agent.reasoning_summary:
+            print(f"Action: {agent.reasoning_summary}")
+        if agent.message:
+            print(f"Agent: {agent.message}")
+            print("")
 
 if __name__ == "__main__":
     main()
