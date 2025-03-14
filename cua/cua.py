@@ -88,8 +88,6 @@ class Scaler:
 
     def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
         x, y = self._point_to_screen_coords(x, y)
-        scroll_x = int(scroll_x * (self.screen_width / self.dimensions[0]))
-        scroll_y = int(scroll_y * (self.screen_height / self.dimensions[1]))
         self.computer.scroll(x, y, scroll_x, scroll_y)
 
     def type(self, text: str) -> None:
