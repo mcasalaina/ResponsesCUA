@@ -30,7 +30,7 @@ class State: # pylint: disable=too-many-instance-attributes
         for item in response.output:
             if item.type == "computer_call":
                 self.next_action = "computer_call_output"
-                self.previous_computer_id = item.call_id if hasattr(item, 'call_id') else item.id # TODO
+                self.previous_computer_id = item.call_id
                 self.computer_action = item.action.type
                 self.computer_action_args = {k: v for k, v in vars(item.action).items() if k != "type"}
                 if self.computer_action == "drag" and len(self.computer_action_args["path"]) > 0: # TODO Workround
