@@ -44,9 +44,8 @@ class LocalComputer:
             pyautogui.doubleClick(x, y)
 
     def scroll(self, x: int, y: int, scroll_x: int, scroll_y: int) -> None:
-        pyautogui.moveTo(x, y, duration=0.1)
-        pyautogui.vscroll(scroll_y)
-        pyautogui.hscroll(scroll_x)
+        pyautogui.scroll(-scroll_y, x=x, y=y)
+        pyautogui.hscroll(scroll_x, x=x, y=y)
 
     def type(self, text: str) -> None:
         pyautogui.write(text)
