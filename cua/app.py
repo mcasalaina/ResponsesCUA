@@ -7,8 +7,8 @@ Make sure to install the required packages before running the script.
 import argparse
 import logging
 import os
-
 import openai
+
 import cua
 from local_computer import LocalComputer
 from vnc_computer import VNCComputer
@@ -28,10 +28,9 @@ def main():
 
     if args.endpoint == "azure":
         client = openai.AzureOpenAI(
-            azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT"), # TODO
-            api_key = os.environ.get("AZURE_OPENAI_API_KEY"), # TODO
-            api_version = "2025-03-01-preview",
-            default_headers = {"x-ms-enable-preview": "true"}) # TODO
+            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+            api_key=os.environ["AZURE_OPENAI_API_KEY"],
+            api_version="2025-03-01-preview")
     else:
         client = openai.OpenAI()
 
