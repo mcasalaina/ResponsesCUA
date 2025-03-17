@@ -65,12 +65,12 @@ class LocalComputer:
             pyautogui.keyUp(key)
 
     def drag(self, path: list[dict[str, int]]) -> None:
-        x = path[0]["x"]
-        y = path[0]["y"]
+        x = path[0].x
+        y = path[0].y
         pyautogui.moveTo(x, y, duration=0.1)
         pyautogui.mouseDown()
         for point in path[1:]:
-            x = point["x"]
-            y = point["y"]
+            x = point.x
+            y = point.y
             pyautogui.moveTo(x, y, duration=0.1)
         pyautogui.mouseUp()
