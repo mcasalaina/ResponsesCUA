@@ -140,7 +140,8 @@ class Agent:
             response = self.client.responses.create(
                 model = self.model,
                 input = user_message,
-                tools = tools)
+                tools = tools,
+                truncation = "auto")
         self.state = State(response)
 
     @property
@@ -204,7 +205,8 @@ class Agent:
                         model = self.model,
                         input = [next_input],
                         previous_response_id = previous_response_id,
-                        tools = tools)
+                        tools = tools,
+                        truncation = "auto")
                 self.state = State(next_response)
                 return
             except openai.OpenAIError as error:
