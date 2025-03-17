@@ -130,17 +130,11 @@ class Agent:
 
     def start_task(self, user_message):
         tools = [self.computer_tool()]
-        if not self.azure: # TODO
-            response = self.client.responses.create(
-                model = self.model,
-                input = user_message,
-                tools = tools,
-                truncation = "auto")
-        else:
-            response = self.client.responses.create(
-                model = self.model,
-                input = user_message,
-                tools = tools)
+        response = self.client.responses.create(
+            model = self.model,
+            input = user_message,
+            tools = tools,
+            truncation = "auto")
         self.state = State(response)
 
     @property
@@ -192,19 +186,12 @@ class Agent:
         while retry > 0:
             try:
                 time.sleep(wait_time)
-                if not self.azure:
-                    next_response = self.client.responses.create(
-                        model = self.model,
-                        input = [next_input],
-                        previous_response_id = previous_response_id,
-                        tools = tools,
-                        truncation = "auto")
-                else:
-                    next_response = self.client.responses.create(
-                        model = self.model,
-                        input = [next_input],
-                        previous_response_id = previous_response_id,
-                        tools = tools)
+                next_response = self.client.responses.create(
+                    model = self.model,
+                    input = [next_input],
+                    previous_response_id = previous_response_id,
+                    tools = tools,
+                    truncation = "auto")
                 self.state = State(next_response)
                 return
             except openai.OpenAIError as error:
