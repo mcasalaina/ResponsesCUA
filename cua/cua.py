@@ -35,7 +35,7 @@ class State: # pylint: disable=too-many-instance-attributes
                 self.computer_action_args = {k: v for k, v in vars(item.action).items() if k != "type"}
                 self.pending_safety_checks = item.pending_safety_checks
             elif item.type == "reasoning":
-                self.reasoning_summary = "".join([summary["text"] for summary in item.summary])
+                self.reasoning_summary = "".join([summary.text for summary in item.summary])
             elif item.type == "message":
                 self.next_action = "user_interaction"
                 self.message += item.content[-1].text
