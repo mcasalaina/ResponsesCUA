@@ -1,4 +1,4 @@
-openai>=1.66.0
+openai>=1.66.3
 pyautogui
 requests
 vncdotool
