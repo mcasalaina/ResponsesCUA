@@ -132,9 +132,6 @@ class CUAApp:
         self.canvas = tk.Canvas(self.vnc_frame, width=1024, height=768, bg="black")
         self.canvas.pack(fill=tk.BOTH, expand=True)
         
-        # Display a placeholder image/text
-        self.canvas.create_text(512, 384, text="VNC Output Will Appear Here", fill="white", font=('Arial', 14))
-        
         # Bind resize events specific to canvas
         self.canvas.bind("<Configure>", self.on_canvas_resize)
 
