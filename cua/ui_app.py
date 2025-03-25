@@ -21,15 +21,34 @@ from local_computer import LocalComputer
 from vnc_computer import VNCComputer
 
 class RedirectText:
-    """Redirect print statements to the Text widget"""
+    """Redirect print statements to the Text widget with rich text formatting"""
     def __init__(self, text_widget):
         self.text_widget = text_widget
         self.buffer = ""
+        
+        # Configure text tags for different actors
+        self.text_widget.tag_configure("user", foreground="black", font=('Arial', 12, 'bold'))
+        self.text_widget.tag_configure("agent", foreground="blue", font=('Arial', 12, 'bold'))
+        self.text_widget.tag_configure("action", foreground="dark green", font=('Arial', 12, 'bold'))
+        self.text_widget.tag_configure("normal", font=('Arial', 12))
 
     def write(self, string):
         self.buffer += string
         self.text_widget.config(state=tk.NORMAL)
-        self.text_widget.insert(tk.END, string)
+        
+        # Identify actor prefixes and apply appropriate tags
+        if string.startswith("User: "):
+            self.text_widget.insert(tk.END, "User: ", "user")
+            self.text_widget.insert(tk.END, string[6:], "normal")
+        elif string.startswith("Agent: "):
+            self.text_widget.insert(tk.END, "Agent: ", "agent")
+            self.text_widget.insert(tk.END, string[7:], "normal")
+        elif string.startswith("Action: "):
+            self.text_widget.insert(tk.END, "Action: ", "action")
+            self.text_widget.insert(tk.END, string[8:], "normal")
+        else:
+            self.text_widget.insert(tk.END, string, "normal")
+            
         self.text_widget.see(tk.END)
         self.text_widget.config(state=tk.DISABLED)
     
@@ -71,17 +90,19 @@ class CUAApp:
         self.root.bind("<Configure>", self.on_resize)
 
     def create_frames(self):
-        # Main layout frames
-        self.main_frame = ttk.Frame(self.root)
+        # Main layout as a PanedWindow to allow resizing with a slider
+        self.main_frame = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Left frame for VNC output
         self.vnc_frame = ttk.Frame(self.main_frame, width=1024, height=768)
-        self.vnc_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # Right frame for controls
         self.controls_frame = ttk.Frame(self.main_frame, width=250)
-        self.controls_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Add frames to the PanedWindow
+        self.main_frame.add(self.vnc_frame, weight=4)  # VNC frame gets more space
+        self.main_frame.add(self.controls_frame, weight=1)  # Controls get less space
 
     def create_sidebar_controls(self):
         # Parameters frame
@@ -91,17 +112,17 @@ class CUAApp:
         # VM Address
         ttk.Label(params_frame, text="VM Address:").pack(anchor=tk.W, padx=5, pady=2)
         self.vm_address_var = tk.StringVar(value="172.21.23.116")
-        ttk.Entry(params_frame, textvariable=self.vm_address_var).pack(fill=tk.X, padx=5, pady=2)
+        ttk.Entry(params_frame, textvariable=self.vm_address_var, font=('Arial', 12)).pack(fill=tk.X, padx=5, pady=2)
         
         # Environment
         ttk.Label(params_frame, text="Environment:").pack(anchor=tk.W, padx=5, pady=2)
         self.environment_var = tk.StringVar(value="linux")
-        ttk.Entry(params_frame, textvariable=self.environment_var).pack(fill=tk.X, padx=5, pady=2)
+        ttk.Entry(params_frame, textvariable=self.environment_var, font=('Arial', 12)).pack(fill=tk.X, padx=5, pady=2)
         
         # Model
         ttk.Label(params_frame, text="Model:").pack(anchor=tk.W, padx=5, pady=2)
         self.model_var = tk.StringVar(value="computer-use-preview")
-        ttk.Entry(params_frame, textvariable=self.model_var).pack(fill=tk.X, padx=5, pady=2)
+        ttk.Entry(params_frame, textvariable=self.model_var, font=('Arial', 12)).pack(fill=tk.X, padx=5, pady=2)
         
         # Endpoint
         ttk.Label(params_frame, text="Endpoint:").pack(anchor=tk.W, padx=5, pady=2)
@@ -119,13 +140,46 @@ class CUAApp:
         ttk.Label(params_frame, text="Instructions:").pack(anchor=tk.W, padx=5, pady=2)
         self.instructions_var = tk.StringVar(value="Go to https://aka.ms/ldgriev and fill out a grievance and submit it. The name is Mark Smith, the address is 555 Main St., and the delivery date is March 20, 2025. Accept any cookies if a popup arises. Submit the form as soon as it is complete. Do not ask the user for permission to take any action, just take the action.")
         
-        self.instructions_text = tk.Text(params_frame, height=5, wrap=tk.WORD)
+        self.instructions_text = tk.Text(params_frame, height=5, wrap=tk.WORD, font=('Arial', 12))
         self.instructions_text.pack(fill=tk.X, padx=5, pady=2)
         self.instructions_text.insert(tk.END, self.instructions_var.get())
+        
+        # User Input area
+        self.user_input_frame = ttk.LabelFrame(params_frame, text="User Input")
+        self.user_input_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Create a frame for the input field and submit button
+        input_row_frame = ttk.Frame(self.user_input_frame)
+        input_row_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # User input field
+        self.user_input_var = tk.StringVar()
+        self.user_input_field = ttk.Entry(input_row_frame, textvariable=self.user_input_var, font=('Arial', 12))
+        self.user_input_field.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        # Bind Enter key to submit
+        self.user_input_field.bind("<Return>", self.submit_user_input)
+        
+        # Submit button
+        self.submit_button = ttk.Button(input_row_frame, text="Submit", command=self.submit_user_input)
+        self.submit_button.pack(side=tk.RIGHT)
+        
+        # Disable user input initially
+        self.user_input_field.config(state=tk.DISABLED)
+        self.submit_button.config(state=tk.DISABLED)
         
         # Start/Stop button
         self.start_button = ttk.Button(params_frame, text="Start", command=self.start_agent)
         self.start_button.pack(fill=tk.X, padx=5, pady=10)
+        
+    def submit_user_input(self, event=None):
+        """Handle user input submission when Submit button is clicked or Enter is pressed"""
+        if hasattr(self, 'waiting_for_input') and self.waiting_for_input:
+            self.user_input = self.user_input_var.get()
+            self.waiting_for_input = False
+            self.user_input_field.config(state=tk.DISABLED)
+            self.submit_button.config(state=tk.DISABLED)
+            self.user_input_var.set("")  # Clear the input field
 
     def create_central_area(self):
         # VNC output canvas
@@ -144,7 +198,7 @@ class CUAApp:
         clear_button.pack(anchor=tk.W, padx=5, pady=2)
         
         # Log text area
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=20, state=tk.DISABLED)
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=20, state=tk.DISABLED, font=('Arial', 12))
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Redirect stdout to the log text widget
@@ -304,24 +358,60 @@ class CUAApp:
             while self.running:
                 user_message = None
                 if self.agent.requires_consent and not self.autoplay_var.get():
-                    # This would need user input, but we'll auto-continue for this UI
-                    print("Waiting for consent...")
-                    time.sleep(1)
+                    # Enable user input for consent
+                    print("Agent requires consent. Please provide your response:")
+                    self.waiting_for_input = True
+                    self.root.after(0, lambda: self.enable_user_input())
+                    
+                    # Wait for user input
+                    while self.waiting_for_input and self.running:
+                        time.sleep(0.1)
+                    
+                    if not self.running:
+                        break
+                    
+                    user_message = self.user_input
+                    
                 elif self.agent.pending_safety_checks and not self.autoplay_var.get():
-                    print(f"Acknowledging safety checks: {self.agent.pending_safety_checks}")
-                    time.sleep(1)
+                    # Enable user input for safety checks
+                    print(f"Safety checks: {self.agent.pending_safety_checks}")
+                    print("Please acknowledge these safety checks:")
+                    self.waiting_for_input = True
+                    self.root.after(0, lambda: self.enable_user_input())
+                    
+                    # Wait for user input
+                    while self.waiting_for_input and self.running:
+                        time.sleep(0.1)
+                    
+                    if not self.running:
+                        break
+                    
+                    user_message = self.user_input
+                    
                 elif self.agent.requires_user_input:
-                    # In a real UI, this would pop up a dialog for user input
-                    print("Agent requires user input, continuing automatically...")
-                    user_message = ""
+                    # Enable user input field for agent requests
+                    print("Agent requires user input. Please respond:")
+                    self.waiting_for_input = True
+                    self.root.after(0, lambda: self.enable_user_input())
+                    
+                    # Wait for user input
+                    while self.waiting_for_input and self.running:
+                        time.sleep(0.1)
+                    
+                    if not self.running:
+                        break
+                    
+                    user_message = self.user_input
                 
-                self.agent.continue_task(user_message)
-                print("")
-                if self.agent.reasoning_summary:
-                    print(f"Action: {self.agent.reasoning_summary}")
-                if self.agent.message:
-                    print(f"Agent: {self.agent.message}")
+                # Only continue if we're still running
+                if self.running:
+                    self.agent.continue_task(user_message)
                     print("")
+                    if self.agent.reasoning_summary:
+                        print(f"Action: {self.agent.reasoning_summary}")
+                    if self.agent.message:
+                        print(f"Agent: {self.agent.message}")
+                        print("")
             
         except Exception as e:
             print(f"Error: {e}")
@@ -330,6 +420,12 @@ class CUAApp:
             sys.stdout = original_stdout
             self.running = False
             self.root.after(0, lambda: self.start_button.config(text="Start"))
+    
+    def enable_user_input(self):
+        """Enable the user input field and submit button"""
+        self.user_input_field.config(state=tk.NORMAL)
+        self.submit_button.config(state=tk.NORMAL)
+        self.user_input_field.focus()
 
 def main():
     root = tk.Tk()
