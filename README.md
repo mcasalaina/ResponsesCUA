@@ -1,6 +1,6 @@
-# ResponsesCUAPrPr
+# ResponsesCUA
 
-Welcome to the Responses API + CUA Private Preview!
+This is Marco Casalaina's fork of the Responses API SDK, which he used to produce various demos using the computer use agent.
 
 The Responses API is the newest API from AOAI. Think of it as an update to the ChatCompletions API that now additionally supports conversation threading and tool calling. The CUA (Computer-Using Agent) model is a new model from AOAI that can interact with GUIs, like a human would. 
 
