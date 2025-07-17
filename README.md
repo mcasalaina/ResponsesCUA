@@ -1,6 +1,6 @@
 # ResponsesCUA
 
-This is Marco Casalaina's fork of the Responses API SDK, which he used to produce various demos using the computer use agent.
+This is Marco Casalaina's fork of the Responses API SDK, which he used to produce various demos using the computer use agent. Run the python file *cua/ui_app.py* in here to generate a user interface that controls a remote VM (via an IP address you can set) using the VNC protocol. 
 
 The Responses API is the newest API from AOAI. Think of it as an update to the ChatCompletions API that now additionally supports conversation threading and tool calling. The CUA (Computer-Using Agent) model is a new model from AOAI that can interact with GUIs, like a human would. 
 
